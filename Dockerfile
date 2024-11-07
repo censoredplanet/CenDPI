@@ -1,6 +1,6 @@
 FROM golang:1.23.2
 
-RUN apt-get update && apt-get install -y libpcap-dev iproute2
+RUN apt-get update && apt-get install -y libpcap-dev iproute2 
 
 WORKDIR /app
 

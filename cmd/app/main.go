@@ -5,10 +5,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 
-	"github.com/censoredplanet/CenDPI/internal/tcp"
-	"github.com/gopacket/gopacket/layers"
-	"github.com/gopacket/gopacket/pcap"
+	"github.com/censoredplanet/CenDPI/internal/service"
 )
 
 func main() {
@@ -19,8 +18,11 @@ func main() {
 	ifaceName := flag.String("iface", "", "Network interface name to use")
 	srcIPStr := flag.String("srcip", "", "Source IP address (required)")
 	dstIPStr := flag.String("dstip", "", "Destination IP address (required)")
+	gatewayIPFlag := flag.String("gatewayip", "", "Gateway IP address (optional)")
+	gatewayMACFlag := flag.String("gatewaymac", "", "Gateway MAC address (optional)")
 	srcPortFlag := flag.Int("srcport", 59152, "Source ephemeral port (49152–65535 for MacOS & 32768–60999 Linux kernel)")
 	dstPortFlag := flag.Int("dstport", 80, "Destination port")
+	mode := flag.String("mode", "tcp", "Connection to establish")
 	pcapOutput := flag.String("pcapoutput", "output.pcap", "Optional: File path to save the pcap capture output")
 
 	flag.Parse()
@@ -47,24 +49,19 @@ func main() {
 		log.Fatalf("Error: -dstport value needs to be either 80 or 443")
 	}
 
-	handle, err := pcap.OpenLive(*ifaceName, 65535, true, pcap.BlockForever)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer handle.Close()
-
-	cenTcp := tcp.CenTCP{
-		Iface:   *ifaceName,
-		SrcIp:   srcIP,
-		DstIp:   dstIP,
-		SrcPort: layers.TCPPort(*srcPortFlag),
-		DstPort: layers.TCPPort(*dstPortFlag),
+	if !service.ValidMode(strings.ToUpper(*mode)) {
+		log.Fatalf("Error: invalid -mode value")
 	}
 
-	err = cenTcp.InitiateHandshake(*pcapOutput)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("TCP handshake completed")
+	service.Start(service.ModeConfig{
+		IfaceName:      ifaceName,
+		Mode:           strings.ToUpper(*mode),
+		PcapOutput:     pcapOutput,
+		GatewayIPFlag:  gatewayIPFlag,
+		GatewayMACFlag: gatewayMACFlag,
+		SrcPort:        srcPortFlag,
+		DstPort:        dstPortFlag,
+		SrcIP:          srcIP,
+		DstIP:          dstIP,
+	})
 }
