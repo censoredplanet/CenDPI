@@ -13,9 +13,15 @@
 - `-iface`: **Required** — Specifies the network interface to use (e.g., `eth0`).
 - `-srcip`: **Required** — Source IP address for the TCP handshake.
 - `-dstip`: **Required** — Destination IP address for the TCP handshake.
+- `-gatewayip`: *Optional* — Gateway IP address.
+- `-gatewaymac`: *Optional* — Gateway MAC address.
 - `-srcport`: Optional — Source ephemeral port (default: `59152`). Must be in the range `32768–65535` for Linux or `49152–65535` for macOS.
-- `-dstport`: Optional — Destination port (default: `80`). Only ports `80` (HTTP) and `443` (HTTPS) are allowed.
+- `-dstport`: Optional — Destination port (default: `80`). Only ports `80` (HTTP) and `443` (HTTPS) are allowed.kpfctl -s rules
+- `-mode`: Optional — Connection to establish (default: `tcp`).
 - `-pcapoutput`: Optional — File path to save the pcap capture (default: `output.pcap`).
+
+**Note**: **One of `gatewayip` or `gatewaymac` must be provided.** 
+
 
 ## Building the Program
 
@@ -48,6 +54,28 @@ To run the program on your host machine (with root privileges):
 ```bash
 sudo ./cendpi -iface eth0 -srcip x.x.x.x -dstip x.x.x.x -srcport 49153 -dstport 80 -pcapoutput output.pcap
 ```
+
+##### macOS host machine
+
+To run directly on macOS, you can configure the firewall settings with `pfctl` to drop outgoing RST packets sent by the OS. You need to edit the `\etc\pf.conf` file (*remember to back up original configuration*), and add the following:
+
+```
+block drop out proto tcp flags R/R
+```
+
+Some helpful commands:
+```
+sudo pfctl -e   # enable pf
+
+sudo pfctl -f /etc/pf.conf  # load filter rules
+
+sudo pfctl -s all   # show all rules
+
+sudo pfctl -d   # disable pf
+```
+
+
+
 
 #### Running using Docker (recommended)
 
