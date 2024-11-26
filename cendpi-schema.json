@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "interface": {
+      "type": "string",
+      "description": "Network interface name"
+    },
+    "pcapPath": {
+      "type": "string",
+      "description": "Path to pcap file"
+    },
+    "bpf": {
+      "type": "string",
+      "description": "Berkeley Packet Filter (BPF) to apply"
+    },
+    "delay": {
+      "type": "integer",
+      "description": "Seconds to wait for any respone packets",
+      "default": 1
+    },
+    "packets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ethernet": {
+            "type": "object",
+            "properties": {
+              "srcMac": {
+                "type": "string",
+                "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+              },
+              "dstMac": {
+                "type": "string",
+                "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+              }
+            },
+            "required": ["srcMac", "dstMac"],
+            "additionalProperties": false
+          },
+          "ip": {
+            "type": "object",
+            "properties": {
+              "srcIp": {
+                "type": "string",
+                "format": "ipv4"
+              },
+              "dstIp": {
+                "type": "string",
+                "format": "ipv4"
+              },
+              "tos": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255,
+                "default": 0
+              },
+              "ttl": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255,
+                "default": 64
+              }
+            },
+            "required": ["srcIp", "dstIp", "ttl"],
+            "additionalProperties": false
+          },
+          "tcp": {
+            "type": "object",
+            "properties": {
+              "srcPort": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "dstPort": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "default": 80
+              },
+              "window": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "default": 65535
+              },
+              "flags": {
+                "type": "object",
+                "properties": {
+                  "syn": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "ack": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "psh": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "fin": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "rst": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "urg": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "ece": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              },
+              "data": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+              }
+            },
+            "required": ["srcPort", "dstPort", "window"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["ethernet", "ip", "tcp"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["interface", "pcapPath", "bpf"],
+  "additionalProperties": false
+}

@@ -19,7 +19,7 @@ type NetCapConfig struct {
 	Interface      *net.Interface
 	SnapLen        int32
 	Timeout        time.Duration
-	BPFFilter      string
+	BPF            string
 	ReadBufferSize int
 	PCAPFile       string
 }
@@ -42,8 +42,8 @@ func New(config NetCapConfig) (*NetCap, error) {
 		return nil, fmt.Errorf("failed to open pcap handle: %v", err)
 	}
 
-	if config.BPFFilter != "" {
-		if err := handle.SetBPFFilter(config.BPFFilter); err != nil {
+	if config.BPF != "" {
+		if err := handle.SetBPFFilter(config.BPF); err != nil {
 			handle.Close()
 			return nil, fmt.Errorf("failed to set BPF filter: %v", err)
 		}
@@ -88,7 +88,7 @@ func (n *NetCap) Close() error {
 	return nil
 }
 
-func (n *NetCap) writePacketToPCAP(packet []byte, captureTime time.Time) error {
+func (n *NetCap) WritePacketToPCAP(packet []byte, captureTime time.Time) error {
 	err := n.pcapWriter.WritePacket(gopacket.CaptureInfo{
 		Timestamp:     captureTime,
 		CaptureLength: len(packet),
@@ -102,7 +102,7 @@ func (n *NetCap) writePacketToPCAP(packet []byte, captureTime time.Time) error {
 
 func (n *NetCap) SendPacket(packet []byte) error {
 	// Write packet to pcap file before sending
-	if err := n.writePacketToPCAP(packet, time.Now()); err != nil {
+	if err := n.WritePacketToPCAP(packet, time.Now()); err != nil {
 		return err
 	}
 
@@ -118,9 +118,6 @@ func (n *NetCap) SendPacket(packet []byte) error {
 
 	if err := n.Handle.WritePacketData(packet); err != nil {
 		return fmt.Errorf("failed to send packet: %v", err)
-	}
-	if err := n.writePacketToPCAP(packet, time.Now()); err != nil {
-		return err
 	}
 	return nil
 }
@@ -144,7 +141,7 @@ func (n *NetCap) ReceivePacket(ctx context.Context) ([]byte, uint32, uint32, err
 				continue
 			}
 
-			err = n.writePacketToPCAP(packet.Data(), packet.Metadata().Timestamp)
+			err = n.WritePacketToPCAP(packet.Data(), packet.Metadata().Timestamp)
 			if err != nil {
 				return nil, 0, 0, fmt.Errorf("error writing to pcap: %v", err)
 			}
@@ -153,15 +150,79 @@ func (n *NetCap) ReceivePacket(ctx context.Context) ([]byte, uint32, uint32, err
 			if tcpLayer != nil {
 				tcp, ok := tcpLayer.(*layers.TCP)
 				if ok {
+
 					if tcp.SYN && tcp.ACK {
 						log.Printf("SYN-ACK received - Sequence: %d, Acknowledgment: %d",
 							tcp.Seq, tcp.Ack)
 						return packet.Data(), tcp.Seq, tcp.Ack, nil
 					}
+					if tcp.PSH && tcp.ACK {
+						log.Printf("PSH-ACK received - Sequence: %d, Acknowledgment: %d",
+							tcp.Seq, tcp.Ack)
+						return packet.Data(), tcp.Seq, tcp.Ack, nil
+					}
+					if tcp.FIN && tcp.ACK {
+						log.Printf("ACK received - Sequence: %d, Acknowledgment: %d",
+							tcp.Seq, tcp.Ack)
+						return packet.Data(), tcp.Seq + uint32(len(tcp.Payload)), tcp.Ack, nil
+					}
+					if tcp.ACK {
+						log.Printf("ACK received - Sequence: %d, Acknowledgment: %d",
+							tcp.Seq, tcp.Ack)
+						return packet.Data(), tcp.Seq + uint32(len(tcp.Payload)), tcp.Ack, nil
+					}
 				}
 			}
 		}
 	}
+}
+
+type PacketInfo struct {
+	Data     gopacket.Packet
+	Metadata *gopacket.PacketMetadata
+	Seq      uint32
+	Ack      uint32
+}
+
+func (n *NetCap) StartPacketReceiver(ctx context.Context) chan PacketInfo {
+	packetChan := make(chan PacketInfo)
+
+	go func() {
+		defer close(packetChan)
+		packetSource := gopacket.NewPacketSource(n.Handle, n.Handle.LinkType())
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			default:
+				packet, err := packetSource.NextPacket()
+				if err != nil {
+					if err == io.EOF || err == pcap.NextErrorTimeoutExpired {
+						continue
+					}
+					log.Println("Error reading packet:", err)
+					continue
+				}
+
+				tcpLayer := packet.Layer(layers.LayerTypeTCP)
+				if tcpLayer != nil {
+					tcp, ok := tcpLayer.(*layers.TCP)
+					if ok {
+						packetChan <- PacketInfo{
+							Data:     packet,
+							Metadata: packet.Metadata(),
+							Seq:      tcp.Ack,
+							Ack:      tcp.Seq,
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	return packetChan
 }
 
 func BuildTCPResponseFilter(srcIP, dstIP net.IP, srcPort, dstPort int) string {

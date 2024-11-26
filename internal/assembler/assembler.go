@@ -46,12 +46,15 @@ func (a *Assembler) Build() ([]byte, error) {
 		}
 
 		if tcp, ok := l.(*golayer.TCP); ok && ipLayer != nil {
+			layers = append(layers, l)
+			if len(tcp.Payload) > 0 {
+				layers = append(layers, gopacket.Payload(tcp.Payload))
+			}
 			tcp.SetNetworkLayerForChecksum(ipLayer)
+		} else {
+			layers = append(layers, l)
 		}
-
-		layers = append(layers, l)
 	}
-
 	err := gopacket.SerializeLayers(buf, opts, layers...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize layers: %w", err)
