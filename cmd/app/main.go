@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"flag"
 	"log"
 	"net"
@@ -49,12 +50,19 @@ type TCPFlags struct {
 	ECE bool `yaml:"ece"`
 }
 
+type TCPOptionYaml struct {
+	TCPOptionType   uint8  `yaml:"tcpOptionType"` 
+	TCPOptionLength uint8  `yaml:"tcpOptionLength"`
+	TCPOptionData   string `yaml:"tcpOptionData"` 
+}
+
 type TCPYaml struct {
 	SrcPort uint16   `yaml:"srcPort"`
 	DstPort uint16   `yaml:"dstPort"`
 	Window  uint16   `yaml:"window"`
 	Flags   TCPFlags `yaml:"flags"`
 	Data    string   `yaml:"data,omitempty"` // Base64 encoded
+	TCPOptions []TCPOptionYaml  `yaml:"tcpOptions,omitempty"`
 }
 
 func parseConfig(data []byte) *service.ServiceConfig {
@@ -93,6 +101,23 @@ func parseConfig(data []byte) *service.ServiceConfig {
 			p.TCP.Data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(c.TCP.Data))
 			if err != nil {
 				log.Fatal(err)
+			}
+		}
+
+		// Parse TCP Options
+		if c.TCP.TCPOptions != nil {
+			for _, option := range c.TCP.TCPOptions {
+				tcpOption := layers.TCPOption{
+					OptionType:   layers.TCPOptionKind(option.TCPOptionType),
+					OptionLength: uint8(option.TCPOptionLength),
+				}
+				if option.TCPOptionData != "" {
+					tcpOption.OptionData, err = hex.DecodeString(option.TCPOptionData)
+					if err != nil {
+						log.Fatalf("Invalid hex in TCP Option data: %v", err)
+					}
+				}
+				p.TCP.Options = append(p.TCP.Options, tcpOption)
 			}
 		}
 

@@ -122,6 +122,30 @@
               "data": {
                 "type": "string",
                 "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+              },
+              "tcpOptions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tcpOptionType": {
+                      "type": "integer",
+                      "description": "TCP Option type"
+                    },
+                    "tcpOptionLength": {
+                      "type": "integer",
+                      "description": "Length of the TCP Option",
+                      "minimum": 0
+                    },
+                    "tcpOptionData": {
+                      "type": "string",
+                      "pattern": "^[0-9A-Fa-f]*$",
+                      "description": "Hex-encoded option data"
+                    }
+                  },
+                  "required": ["tcpOptionType"],
+                  "additionalProperties": false
+                }
               }
             },
             "required": ["srcPort", "dstPort", "window"],

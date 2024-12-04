@@ -25,3 +25,4 @@ go.work.sum
 .env
 /local_files
 .DS_Store
+cendpi

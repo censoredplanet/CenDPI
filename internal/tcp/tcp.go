@@ -29,6 +29,7 @@ type TCPConfig struct {
 	URG     bool
 	ECE     bool
 	Data    []byte
+	Options  []layers.TCPOption
 }
 
 type TCPLayer struct {
@@ -61,5 +62,10 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 		tcp.Payload = t.config.Data
 	}
 
+	// Add options if they exist
+	if len(t.config.Options) > 0 {
+		tcp.Options = t.config.Options
+	}
+	
 	return tcp, nil
 }

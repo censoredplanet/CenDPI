@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=./cendpi-schema.json
+interface: en0
+pcapPath: test.pcap
+bpf: tcp and src host 142.251.40.195 and src port 80
+delay: 1
+packets:
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 50:9a:4c:5e:05:26
+    ip:
+      srcIp: 172.20.2.161
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+    tcp:
+      srcPort: 42351
+      dstPort: 80
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+      
+  
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 50:9a:4c:5e:05:26
+    ip:
+      srcIp: 172.20.2.161
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+    tcp:
+      srcPort: 42351
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 50:9a:4c:5e:05:26
+    ip:
+      srcIp: 172.20.2.161
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+    tcp:
+      srcPort: 42351
+      dstPort: 80
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      data: R0VUIC8gSFRUUC8xLjEKSG9zdDogZ29vZ2xlLmNvbQpDb25uZWN0aW9uOiBjbG9zZQoK
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 50:9a:4c:5e:05:26
+    ip:
+      srcIp: 172.20.2.161
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+    tcp:
+      srcPort: 42351
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+        fin: true
