@@ -6,9 +6,9 @@ delay: 1
 packets:
   - ethernet:
       srcMac: f4:d4:88:74:62:40
-      dstMac: 50:9a:4c:5e:05:26
+      dstMac: 7c:10:c9:72:ef:c0
     ip:
-      srcIp: 172.20.2.161
+      srcIp: 192.168.51.180
       dstIp: 142.251.40.195
       tos: 0
       ttl: 64
@@ -31,9 +31,9 @@ packets:
   
   - ethernet:
       srcMac: f4:d4:88:74:62:40
-      dstMac: 50:9a:4c:5e:05:26
+      dstMac: 7c:10:c9:72:ef:c0
     ip:
-      srcIp: 172.20.2.161
+      srcIp: 192.168.51.180
       dstIp: 142.251.40.195
       tos: 0
       ttl: 64
@@ -47,9 +47,9 @@ packets:
 
   - ethernet:
       srcMac: f4:d4:88:74:62:40
-      dstMac: 50:9a:4c:5e:05:26
+      dstMac: 7c:10:c9:72:ef:c0
     ip:
-      srcIp: 172.20.2.161
+      srcIp: 192.168.51.180
       dstIp: 142.251.40.195
       tos: 0
       ttl: 64
@@ -64,9 +64,9 @@ packets:
 
   - ethernet:
       srcMac: f4:d4:88:74:62:40
-      dstMac: 50:9a:4c:5e:05:26
+      dstMac: 7c:10:c9:72:ef:c0
     ip:
-      srcIp: 172.20.2.161
+      srcIp: 192.168.51.180
       dstIp: 142.251.40.195
       tos: 0
       ttl: 64

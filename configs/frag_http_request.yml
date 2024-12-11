@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=./cendpi-schema.json
+interface: en0
+pcapPath: test.pcap
+bpf: tcp and src host 142.251.40.195 and src port 80
+delay: 1
+
+message:
+  tcp:
+    srcPort: 40009
+    dstPort: 80
+    window: 2056
+    flags:
+      psh: true
+      ack: true
+    data: R0VUIC8gSFRUUC8xLjEKSG9zdDogZ29vZ2xlLmNvbQpDb25uZWN0aW9uOiBjbG9zZQoK
+
+packets:
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33345
+    tcp:
+      srcPort: 40009
+      dstPort: 80
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+      
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33346
+    tcp:
+      srcPort: 40009
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 0
+      fragmentLength: 24
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 3
+      fragmentLength: 24
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: false
+      fragmentOffset: 6
+      fragmentLength: 23
+
+  - ethernet:
+      srcMac: f4:d4:88:74:62:40
+      dstMac: 7c:10:c9:72:ef:c0
+    ip:
+      srcIp: 192.168.51.180
+      dstIp: 142.251.40.195
+      tos: 0
+      ttl: 64
+      id: 33348
+    tcp:
+      srcPort: 40009
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+        fin: true
