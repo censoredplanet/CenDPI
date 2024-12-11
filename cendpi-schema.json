@@ -14,11 +14,6 @@
         "type": "string",
         "description": "Berkeley Packet Filter (BPF) to apply"
       },
-      "delay": {
-        "type": "integer",
-        "description": "Seconds to wait for any response packets",
-        "default": 1
-      },
       "message": {
         "type": "object",
         "description": "Optional higher-layer message to be fragmented/segmented",
@@ -191,6 +186,11 @@
               },
               "required": ["srcPort","dstPort","window"],
               "additionalProperties": false
+            },
+            "delay": {
+              "type": "integer",
+              "description": "Seconds to wait for any response packets",
+              "default": 0
             }
           },
           "required": ["ethernet", "ip"],

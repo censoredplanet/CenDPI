@@ -213,8 +213,8 @@ func (n *NetCap) StartPacketReceiver(ctx context.Context) chan PacketInfo {
 						packetChan <- PacketInfo{
 							Data:     packet,
 							Metadata: packet.Metadata(),
-							Seq:      tcp.Ack,
-							Ack:      tcp.Seq,
+							Seq:      tcp.Seq,
+							Ack:      tcp.Ack,
 						}
 					}
 				}

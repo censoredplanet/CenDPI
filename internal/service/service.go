@@ -22,7 +22,8 @@ type ServiceConfig struct {
     Iface    string
     PcapPath string
     BPF      string
-    Delay    int
+	SrcMAC   string
+	DstMAC   string
     Packets  []ServicePacket
     Message  *ServiceMessage
 }
@@ -36,6 +37,7 @@ type ServicePacket struct {
 	Ethernet ethernet.EthernetConfig
 	IP       ip.IPConfig
 	TCP      tcp.TCPConfig
+	Delay    int // per-packet delay in seconds
 }
 
 type tcpState struct {
@@ -66,18 +68,41 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
 
 			tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
 			if tcpLayer != nil {
+				t := tcpLayer.(*layers.TCP)
 				states := tcpStates[ip]
-				if states.SeqNum < packet.Seq {
-					states.SeqNum = packet.Seq
-				}
-				if states.AckNum < packet.Ack {
-					states.AckNum = packet.Ack
-				}
 
-				tcpStates[ip] = tcpState{
-					SeqNum: states.SeqNum,
-					AckNum: states.AckNum,
-				}
+				// Calculate how much we should increment the Ack number:
+                // Start with the payload length
+                ackIncrement := uint32(len(t.Payload))
+
+                // If SYN is set, increment Ack by 1
+                if t.SYN {
+                    ackIncrement += 1
+                }
+
+                // If FIN is set, increment Ack by 1
+                if t.FIN {
+                    ackIncrement += 1
+                }
+
+				// Update SeqNum (our sending sequence) if needed
+                // If we received a packet acknowledging our data (packet.Ack), move forward our SeqNum
+                if states.SeqNum < packet.Ack {
+                    states.SeqNum = packet.Ack
+                }
+
+                // Update AckNum (the sequence number we'll acknowledge next)
+                // We acknowledge their sequence number plus payload length plus any SYN/FIN increments
+                nextAck := packet.Seq + ackIncrement
+                if states.AckNum < nextAck {
+                    states.AckNum = nextAck
+                }
+
+                tcpStates[ip] = tcpState{
+                    SeqNum: states.SeqNum,
+                    AckNum: states.AckNum,
+                }
+
 			}
 		case <-timer.C:
 			return packets
@@ -90,7 +115,9 @@ func sendAndCollect(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, pk
 	if err != nil {
 		return err
 	}
-	collectPackets(netCap, packetChan, delay, dstIPStr)
+	if delay > 0{
+		collectPackets(netCap, packetChan, delay, dstIPStr)
+	}
 	return nil
 }
 
@@ -119,7 +146,6 @@ func Start(config ServiceConfig) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	packetChan := netCap.StartPacketReceiver(ctx)
-	delayDuration := time.Duration(config.Delay) * time.Second
 
 	for n, p := range config.Packets {
 
@@ -135,11 +161,7 @@ func Start(config ServiceConfig) (err error) {
 				}
 			} else {
 				state := tcpStates[dstIPStr]
-				if (!p.TCP.PSH && p.TCP.ACK) || (p.TCP.FIN && p.TCP.ACK) {
-					p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum+1
-				} else {
-					p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
-				}
+				p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
 				tcpStates[dstIPStr] = tcpState{
 					SeqNum: p.TCP.Seq,
 					AckNum: p.TCP.Ack,
@@ -154,7 +176,7 @@ func Start(config ServiceConfig) (err error) {
 				return err
 			}
 
-			if err := sendAndCollect(netCap, packetChan, packet, delayDuration, dstIPStr); err != nil {
+			if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, dstIPStr); err != nil {
 				return err
 			}
 
@@ -210,7 +232,7 @@ func Start(config ServiceConfig) (err error) {
 					return err
 				}
 
-				if err := sendAndCollect(netCap, packetChan, packet, delayDuration, dstIPStr); err != nil {
+				if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, dstIPStr); err != nil {
 					return err
 				}
 
@@ -223,7 +245,7 @@ func Start(config ServiceConfig) (err error) {
 				if err != nil {
 					return err
 				}
-				if err := sendAndCollect(netCap, packetChan, packet, delayDuration, dstIPStr); err != nil {
+				if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, dstIPStr); err != nil {
 					return err
 				}
 			}

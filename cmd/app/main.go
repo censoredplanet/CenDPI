@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-
 	"github.com/censoredplanet/CenDPI/internal/service"
 	"github.com/censoredplanet/CenDPI/internal/tcp"
 	"github.com/gopacket/gopacket/layers"
@@ -19,7 +18,8 @@ type Config struct {
 	Iface    string    `yaml:"interface"`
 	PcapPath string    `yaml:"pcapPath"`
 	BPF      string    `yaml:"bpf"`
-	Delay    int       `yaml:"delay"`
+	SrcMac   string    `yaml:"srcMac"`
+	DstMac   string    `yaml:"dstMac"`
 	Message  *Message  `yaml:"message,omitempty"`
 	Packets  []Packet  `yaml:"packets"`
 }
@@ -33,6 +33,7 @@ type Packet struct {
 	Ethernet EthernetYaml `yaml:"ethernet"`
 	IP       IPYaml       `yaml:"ip"`
 	TCP      *TCPYaml     `yaml:"tcp,omitempty"`
+	Delay    *int         `yaml:"delay,omitempty"` // Add per-packet delay in seconds
 }
 
 type EthernetYaml struct {
@@ -88,7 +89,8 @@ func parseConfig(data []byte) *service.ServiceConfig {
 		Iface:    config.Iface,
 		PcapPath: config.PcapPath,
 		BPF:      config.BPF,
-		Delay:    config.Delay,
+		SrcMAC:   config.SrcMac,
+		DstMAC:   config.DstMac,
 	}
 
 	// If a message is defined, store it for runtime construction
@@ -146,13 +148,14 @@ func parseConfig(data []byte) *service.ServiceConfig {
 	packets := []service.ServicePacket{}
 	for _, c := range config.Packets {
 		p := service.ServicePacket{}
-		srcMAC, err := net.ParseMAC(c.Ethernet.SrcMAC)
+
+		srcMAC, err := net.ParseMAC(serviceConfig.SrcMAC)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("invalid srcMAC: %w", err)
 		}
-		dstMAC, err := net.ParseMAC(c.Ethernet.DstMAC)
+		dstMAC, err := net.ParseMAC(serviceConfig.DstMAC)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("invalid dstMAC: %w", err)
 		}
 		p.Ethernet.SrcMAC, p.Ethernet.DstMAC = srcMAC, dstMAC
 		p.IP.SrcIP, p.IP.DstIP = net.ParseIP(c.IP.SrcIP), net.ParseIP(c.IP.DstIP)
@@ -206,6 +209,14 @@ func parseConfig(data []byte) *service.ServiceConfig {
 			}
 		}
 
+		// Parse per-packet delay if specified
+		if c.Delay != nil {
+			p.Delay = *c.Delay
+		} else {
+			// If no delay is specified for this packet, default to 0 seconds (consecutive sends)
+			p.Delay = 0
+		}
+
 		packets = append(packets, p)
 	}
 	serviceConfig.Packets = packets
@@ -217,6 +228,12 @@ func main() {
 		log.Fatal("This program must be run as root! (sudo)")
 	}
 
+	// New flags for command-line override
+	srcIPFlag := flag.String("srcip", "", "Override source IP")
+	dstIPFlag := flag.String("dstip", "", "Override destination IP")
+	srcPortFlag := flag.Uint("srcport", 0, "Override source port")
+	dstPortFlag := flag.Uint("dstport", 0, "Override destination port")
+
 	configFile := flag.String("config", "", "Path to the YAML configuration file")
 	flag.Parse()
 
@@ -226,6 +243,61 @@ func main() {
 	}
 
 	config := parseConfig(ymlData)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// If command line IPs and ports are provided, override
+	var overrideSrcIP, overrideDstIP net.IP
+	var overrideSrcPort, overrideDstPort layers.TCPPort
+
+	if *srcIPFlag != "" {
+		overrideSrcIP = net.ParseIP(*srcIPFlag)
+	}
+	if *dstIPFlag != "" {
+		overrideDstIP = net.ParseIP(*dstIPFlag)
+	}
+	if *srcPortFlag != 0 {
+		overrideSrcPort = layers.TCPPort(*srcPortFlag)
+	}
+	if *dstPortFlag != 0 {
+		overrideDstPort = layers.TCPPort(*dstPortFlag)
+	}
+
+	// If overrideDstIP and overrideDstPort are provided, update the BPF
+	if overrideDstIP != nil {
+		config.BPF = "tcp and src host " + overrideDstIP.String()
+	}
+
+	// Apply overrides to all packets
+	for i := range config.Packets {
+		p := &config.Packets[i]
+		if overrideSrcIP != nil {
+			p.IP.SrcIP = overrideSrcIP
+		}
+		if overrideDstIP != nil {
+			p.IP.DstIP = overrideDstIP
+		}
+		if p.TCP.SrcPort != 0 || p.TCP.DstPort != 0 { // TCP layer is defined
+			if overrideSrcPort != 0 {
+				p.TCP.SrcPort = overrideSrcPort
+			}
+			if overrideDstPort != 0 {
+				p.TCP.DstPort = overrideDstPort
+			}
+		}
+	}
+
+	// Apply overrides to Message if TCP is present
+	if config.Message != nil && config.Message.TCP != nil {
+		if overrideSrcPort != 0 {
+			config.Message.TCP.SrcPort = overrideSrcPort
+		}
+		if overrideDstPort != 0 {
+			config.Message.TCP.DstPort = overrideDstPort
+		}
+	}
+
 	if err != nil {
 		log.Fatal(err)
 	}
