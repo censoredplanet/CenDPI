@@ -93,7 +93,7 @@ packets:
       id: 33347
       moreFragments: false
       fragmentOffset: 6
-      fragmentLength: 23
+      fragmentLength: -1
 
   - ethernet:
       srcMac: f4:d4:88:74:62:40

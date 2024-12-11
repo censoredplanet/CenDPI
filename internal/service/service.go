@@ -160,7 +160,7 @@ func Start(config ServiceConfig) (err error) {
 
 		} else {
 			// No TCP layer specified in config
-			if p.IP.FragmentLength > 0 && config.Message != nil {
+			if p.IP.FragmentLength != 0 && config.Message != nil {
 				// IP Fragmentation
 				if config.Message.DataHex == "" {
 					if config.Message.TCP != nil {
@@ -187,7 +187,17 @@ func Start(config ServiceConfig) (err error) {
 				}
 
 				fragOffsetBytes := p.IP.FragmentOffset * 8 // Frag Offset is in 8-byte units
-				endPos := fragOffsetBytes + p.IP.FragmentLength
+				var length int
+				if p.IP.FragmentLength == -1 { // Take the entire remainder
+					length = len(msgBytes) - fragOffsetBytes
+					if length < 0 {
+						return fmt.Errorf("Invalid fragment offset: offset beyond message size")
+					}
+				} else {
+					length = p.IP.FragmentLength
+				}
+
+				endPos := fragOffsetBytes + length
 				if endPos > len(msgBytes) {
 					return fmt.Errorf("Fragment out of range")
 				}
