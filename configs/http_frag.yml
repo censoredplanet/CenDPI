@@ -74,6 +74,7 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
+      fragmentOffset: 3
       messageOffset: 3
       messageLength: 24
 
@@ -85,6 +86,7 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: false
+      fragmentOffset: 6
       messageOffset: 6
       messageLength: -1
     delay: 1

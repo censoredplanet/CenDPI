@@ -156,7 +156,7 @@ func Start(config ServiceConfig) (err error) {
 
 		if hasTCP {
 			if n == 0 {
-				initialSeq = rand.Uint32()
+				initialSeq := rand.Uint32()
 				tcpStates[dstIPStr] = tcpState{
 					SeqNum: initialSeq,
     				AckNum: 0,
@@ -168,13 +168,13 @@ func Start(config ServiceConfig) (err error) {
 			curIsq := state.InitialSeq
 
 			if p.TCP.SeqRelativeToExpected != 0 {
-				p.TCP.Seq = p.TCP.Seq + p.TCP.SeqRelativeToExpected
+				p.TCP.Seq = uint32(int64(p.TCP.Seq) + int64(p.TCP.SeqRelativeToExpected))
 			}
 			if p.TCP.AckRelativeToExpected != 0 {
-				p.TCP.Ack = p.TCP.Ack + p.TCP.AckRelativeToExpected
+				p.TCP.Ack = uint32(int64(p.TCP.Ack) + int64(p.TCP.AckRelativeToExpected))
 			}
 			if p.TCP.SeqRelativeToInitial != 0 {
-				p.TCP.Seq = p.TCP.SeqRelativeToInitial + curIsq
+				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
 			}
 			packet, err := assembler.New().
 				AddLayer(ethernet.New(&p.Ethernet)).
@@ -204,13 +204,13 @@ func Start(config ServiceConfig) (err error) {
 						msgTCP.Seq = state.SeqNum
 						msgTCP.Ack = state.AckNum
 						if msgTCP.SeqRelativeToExpected != 0 {
-							msgTCP.Seq = msgTCP.Seq + msgTCP.SeqRelativeToExpected
+							msgTCP.Seq = uint32(int64(msgTCP.Seq) + int64(msgTCP.SeqRelativeToExpected))
 						}
 						if msgTCP.AckRelativeToExpected != 0 {
-							msgTCP.Ack = msgTCP.Ack + msgTCP.AckRelativeToExpected
+							msgTCP.Ack = uint32(int64(msgTCP.Ack) + int64(msgTCP.AckRelativeToExpected))
 						}
 						if msgTCP.SeqRelativeToInitial != 0 {
-							msgTCP.Seq = msgTCP.SeqRelativeToInitial + curIsq
+							msgTCP.Seq = uint32(int64(curIsq) + int64(msgTCP.SeqRelativeToInitial))
 						}
 						tcpBytes, err := tcp.BuildAndSerialize(&msgTCP, p.IP.SrcIP, p.IP.DstIP)
 						if err != nil {

@@ -20,8 +20,8 @@ type TCPConfig struct {
 	SrcPort layers.TCPPort
 	DstPort layers.TCPPort
 	Window  uint16
-	Seq     int
-	Ack     int
+	Seq     uint32
+	Ack     uint32
 	SYN     bool
 	ACK     bool
 	PSH     bool
