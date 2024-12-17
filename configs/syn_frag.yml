@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=./cendpi-schema.json
+interface: en0
+pcapPath: test.pcap
+srcMac: f4:d4:88:74:62:40
+dstMac: 7c:10:c9:72:ef:c0
+bpf: tcp and src host 192.168.0.2
+
+message:
+  tcp:
+    srcPort: 12345
+    dstPort: 80
+    window: 65535
+    flags:
+      syn: true
+    tcpOptions:
+      - tcpOptionType: 1
+      - tcpOptionType: 1
+      - tcpOptionType: 2
+        tcpOptionLength: 4
+        tcpOptionData: "05B4"
+      - tcpOptionType: 3
+        tcpOptionLength: 3
+        tcpOptionData: "06"
+      
+packets:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: 8
+
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: false
+      fragmentOffset: 1
+      messageOffset: 1
+      messageLength: -1

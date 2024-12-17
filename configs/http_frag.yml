@@ -63,7 +63,8 @@ packets:
       id: 33347
       moreFragments: true
       fragmentOffset: 0
-      fragmentLength: 24
+      messageOffset: 0
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -73,8 +74,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 3
-      fragmentLength: 24
+      messageOffset: 3
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -84,8 +85,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: false
-      fragmentOffset: 6
-      fragmentLength: -1
+      messageOffset: 6
+      messageLength: -1
     delay: 1
 
   - ethernet:

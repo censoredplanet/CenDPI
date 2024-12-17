@@ -17,7 +17,8 @@ type IPConfig struct {
 	Options        []layers.IPv4Option
 	Padding        []byte
 	FragmentOffset int
-	FragmentLength int
+	MessageOffset  int
+	MessageLength  int
 	MoreFragments  bool
 	RawPayload     []byte
 }

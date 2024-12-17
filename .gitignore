@@ -26,3 +26,4 @@ go.work.sum
 /local_files
 .DS_Store
 cendpi
+pcaps/

@@ -43,6 +43,18 @@
                 "maximum": 65535,
                 "default": 65535
               },
+              "seqRelativeToInitial": {
+                "type": "integer",
+                "default": 0
+              },
+              "seqRelativeToExpected": {
+                "type": "integer",
+                "default": 0
+              },
+              "ackRelativeToExpected": {
+                "type": "integer",
+                "default": 0
+              },
               "flags": {
                 "type": "object",
                 "properties": {
@@ -116,19 +128,26 @@
                 "ttl": {"type":"integer","minimum":0,"maximum":255,"default":64},
                 "id": {"type":"integer","minimum":0,"maximum":65535,"default":0},
                 "fragmentOffset": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "description": "If performing IP fragmentation, offset in 8-byte units"
-                },
-                "fragmentLength": {
-                  "type": "integer",
-                  "minimum": 1,
-                  "description": "Length of the fragment to extract from the message"
+                  "type":"integer",
+                  "minimum":0,
+                  "maximum":65535,
+                  "default":0,
+                  "description": "offset used in IP header, in 8-byte units"
                 },
                 "moreFragments": {
                   "type": "boolean",
                   "default": false,
                   "description": "Set true if more fragments follow"
+                },
+                "messageOffset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "If taking payload from Message, offset in 8-byte units"
+                },
+                "messageLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "If taking payload from Message, length of the fragment to extract"
                 }
               },
               "required": ["srcIp", "dstIp", "ttl"],
@@ -140,6 +159,14 @@
                 "srcPort": {"type":"integer","minimum":0,"maximum":65535},
                 "dstPort": {"type":"integer","minimum":0,"maximum":65535,"default":80},
                 "window": {"type":"integer","minimum":0,"maximum":65535,"default":65535},
+                "seq": {
+                  "type": "integer",
+                  "default": 0
+                },
+                "ack": {
+                  "type": "integer",
+                  "default": 0
+                },
                 "flags": {
                   "type": "object",
                   "properties": {
@@ -173,15 +200,15 @@
                     "additionalProperties": false
                   }
                 },
-                "segmentOffset": {
+                "messageOffset": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "If performing TCP segmentation, offset within the message's payload"
+                  "description": "If taking payload from Message, offset in 8-byte units"
                 },
-                "segmentLength": {
+                "messageLength": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "Length of the segment to extract from the message"
+                  "description": "If taking payload from Message, length of the fragment to extract"
                 }
               },
               "required": ["srcPort","dstPort","window"],

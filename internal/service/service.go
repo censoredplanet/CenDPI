@@ -41,7 +41,8 @@ type ServicePacket struct {
 }
 
 type tcpState struct {
-	SeqNum, AckNum uint32
+    SeqNum, AckNum uint32
+    InitialSeq uint32
 }
 
 func wrapError(err *error, str string, args ...any) {
@@ -70,7 +71,7 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
 			if tcpLayer != nil {
 				t := tcpLayer.(*layers.TCP)
 				states := tcpStates[ip]
-
+				curIsq := states.InitialSeq
 				// Calculate how much we should increment the Ack number:
                 // Start with the payload length
                 ackIncrement := uint32(len(t.Payload))
@@ -101,6 +102,7 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
                 tcpStates[ip] = tcpState{
                     SeqNum: states.SeqNum,
                     AckNum: states.AckNum,
+					InitialSeq: curIsq,
                 }
 
 			}
@@ -154,18 +156,25 @@ func Start(config ServiceConfig) (err error) {
 
 		if hasTCP {
 			if n == 0 {
-				p.TCP.Seq = rand.Uint32()
+				initialSeq = rand.Uint32()
 				tcpStates[dstIPStr] = tcpState{
-					SeqNum: p.TCP.Seq,
-					AckNum: 0,
+					SeqNum: initialSeq,
+    				AckNum: 0,
+    				InitialSeq: initialSeq,
 				}
-			} else {
-				state := tcpStates[dstIPStr]
-				p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
-				tcpStates[dstIPStr] = tcpState{
-					SeqNum: p.TCP.Seq,
-					AckNum: p.TCP.Ack,
-				}
+			}
+			state := tcpStates[dstIPStr]
+			p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
+			curIsq := state.InitialSeq
+
+			if p.TCP.SeqRelativeToExpected != 0 {
+				p.TCP.Seq = p.TCP.Seq + p.TCP.SeqRelativeToExpected
+			}
+			if p.TCP.AckRelativeToExpected != 0 {
+				p.TCP.Ack = p.TCP.Ack + p.TCP.AckRelativeToExpected
+			}
+			if p.TCP.SeqRelativeToInitial != 0 {
+				p.TCP.Seq = p.TCP.SeqRelativeToInitial + curIsq
 			}
 			packet, err := assembler.New().
 				AddLayer(ethernet.New(&p.Ethernet)).
@@ -182,16 +191,27 @@ func Start(config ServiceConfig) (err error) {
 
 		} else {
 			// No TCP layer specified in config
-			if p.IP.FragmentLength != 0 && config.Message != nil {
+			if p.IP.MessageLength != 0 && config.Message != nil {
 				// IP Fragmentation
 				if config.Message.DataHex == "" {
+					// No message data available
 					if config.Message.TCP != nil {
 						// Construct DataHex from Message.TCP
 						state := tcpStates[dstIPStr]
+						curIsq := state.InitialSeq
 						msgTCP := *config.Message.TCP
 						// Assume that the payload of the IP fragmentation always have a push/ack flag
 						msgTCP.Seq = state.SeqNum
 						msgTCP.Ack = state.AckNum
+						if msgTCP.SeqRelativeToExpected != 0 {
+							msgTCP.Seq = msgTCP.Seq + msgTCP.SeqRelativeToExpected
+						}
+						if msgTCP.AckRelativeToExpected != 0 {
+							msgTCP.Ack = msgTCP.Ack + msgTCP.AckRelativeToExpected
+						}
+						if msgTCP.SeqRelativeToInitial != 0 {
+							msgTCP.Seq = msgTCP.SeqRelativeToInitial + curIsq
+						}
 						tcpBytes, err := tcp.BuildAndSerialize(&msgTCP, p.IP.SrcIP, p.IP.DstIP)
 						if err != nil {
 							return err
@@ -208,22 +228,22 @@ func Start(config ServiceConfig) (err error) {
 					return err
 				}
 
-				fragOffsetBytes := p.IP.FragmentOffset * 8 // Frag Offset is in 8-byte units
+				messageOffsetBytes := p.IP.MessageOffset * 8 // Message Offset is in 8-byte units
 				var length int
-				if p.IP.FragmentLength == -1 { // Take the entire remainder
-					length = len(msgBytes) - fragOffsetBytes
-					if length < 0 {
+				if p.IP.MessageLength == -1 { // Take the entire remainder
+					length = len(msgBytes) - messageOffsetBytes
+					if length < 1 {
 						return fmt.Errorf("Invalid fragment offset: offset beyond message size")
 					}
 				} else {
-					length = p.IP.FragmentLength
+					length = p.IP.MessageLength
 				}
 
-				endPos := fragOffsetBytes + length
+				endPos := messageOffsetBytes + length
 				if endPos > len(msgBytes) {
 					return fmt.Errorf("Fragment out of range")
 				}
-				fragmentPayload := msgBytes[fragOffsetBytes:endPos]
+				fragmentPayload := msgBytes[messageOffsetBytes:endPos]
 				packet, err := assembler.New().
 					AddLayer(ethernet.New(&p.Ethernet)).
 					AddLayer(ip.NewWithPayload(&p.IP, fragmentPayload)).

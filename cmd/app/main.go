@@ -48,7 +48,8 @@ type IPYaml struct {
 	TTL            uint8  `yaml:"ttl"`
 	Id			   uint16  `yaml:"id"`
 	FragmentOffset *int   `yaml:"fragmentOffset,omitempty"`
-	FragmentLength *int   `yaml:"fragmentLength,omitempty"`
+	MessageOffset  *int   `yaml:"messageOffset,omitempty"`
+	MessageLength  *int   `yaml:"messageLength,omitempty"`
 	MoreFragments  bool   `yaml:"moreFragments,omitempty"`
 }
 
@@ -75,8 +76,11 @@ type TCPYaml struct {
 	Flags         TCPFlags        `yaml:"flags"`
 	Data          string          `yaml:"data,omitempty"`
 	TCPOptions    []TCPOptionYaml `yaml:"tcpOptions,omitempty"`
-	SegmentOffset *int            `yaml:"segmentOffset,omitempty"`
-	SegmentLength *int            `yaml:"segmentLength,omitempty"`
+	SeqRelativeToInitial *int    `yaml:"seqRelativeToInitial,omitempty"`
+	SeqRelativeToExpected *int    `yaml:"seqRelativeToExpected,omitempty"`
+	AckRelativeToExpected *int    `yaml:"ackRelativeToExpected,omitempty"`
+	MessageOffset *int            `yaml:"messageOffset,omitempty"`
+	MessageLength *int            `yaml:"messageLength,omitempty"`
 }
 
 func parseConfig(data []byte) *service.ServiceConfig {
@@ -111,6 +115,11 @@ func parseConfig(data []byte) *service.ServiceConfig {
 				RST:     config.Message.TCP.Flags.RST,
 				URG:     config.Message.TCP.Flags.URG,
 				ECE:     config.Message.TCP.Flags.ECE,
+				SeqRelativeToInitial: config.Message.TCP.SeqRelativeToInitial,
+				SeqRelativeToExpected: config.Message.TCP.SeqRelativeToExpected,
+				AckRelativeToExpected: config.Message.TCP.AckRelativeToExpected,
+				MessageOffset: config.Message.TCP.MessageOffset,
+    			MessageLength: config.Message.TCP.MessageLength,
 			}
 
 			if config.Message.TCP.Data != "" {
@@ -164,6 +173,9 @@ func parseConfig(data []byte) *service.ServiceConfig {
 		if c.IP.FragmentOffset != nil {
 			p.IP.FragmentOffset = *c.IP.FragmentOffset
 		}
+		if c.IP.MessageOffset != nil {
+			p.IP.MessageOffset = *c.IP.MessageOffset
+		}
 		if c.IP.FragmentLength != nil {
 			p.IP.FragmentLength = *c.IP.FragmentLength
 		}
@@ -175,15 +187,23 @@ func parseConfig(data []byte) *service.ServiceConfig {
 			p.TCP.Window = c.TCP.Window
 			p.TCP.SYN, p.TCP.ACK, p.TCP.PSH, p.TCP.FIN = c.TCP.Flags.SYN, c.TCP.Flags.ACK, c.TCP.Flags.PSH, c.TCP.Flags.FIN
 			p.TCP.RST, p.TCP.URG, p.TCP.ECE = c.TCP.Flags.RST, c.TCP.Flags.URG, c.TCP.Flags.ECE
-
-			if c.TCP.SegmentOffset != nil {
-				p.TCP.SegmentOffset = *c.TCP.SegmentOffset
+			if c.TCP.SeqRelativeToInitial != nil {
+				p.TCP.SeqRelativeToInitial = *c.TCP.SeqRelativeToInitial
 			}
-			if c.TCP.SegmentLength != nil {
-				p.TCP.SegmentLength = *c.TCP.SegmentLength
+			if c.TCP.SeqRelativeToExpected != nil {
+				p.TCP.SeqRelativeToExpected = *c.TCP.SeqRelativeToExpected
+			}
+			if c.TCP.AckRelativeToExpected != nil {
+				p.TCP.AckRelativeToExpected = *c.TCP.AckRelativeToExpected
+			}
+			if c.TCP.MessageOffset != nil {
+				p.TCP.MessageOffset = *c.TCP.MessageOffset
+			}
+			if c.TCP.MessageLength != nil {
+				p.TCP.MessageLength = *c.TCP.MessageLength
 			}
 
-			// If no segment/fragment specified and direct data present, decode it now
+			// If no segment/fragment specified and raw data present, decode it now
 			if c.TCP.Data != "" {
 				p.TCP.Data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(c.TCP.Data))
 				if err != nil {

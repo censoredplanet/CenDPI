@@ -20,8 +20,8 @@ type TCPConfig struct {
 	SrcPort layers.TCPPort
 	DstPort layers.TCPPort
 	Window  uint16
-	Seq     uint32
-	Ack     uint32
+	Seq     int
+	Ack     int
 	SYN     bool
 	ACK     bool
 	PSH     bool
@@ -29,8 +29,11 @@ type TCPConfig struct {
 	RST     bool
 	URG     bool
 	ECE     bool
-	SegmentOffset int
-    SegmentLength int
+	SeqRelativeToInitial  int
+	SeqRelativeToExpected int
+	AckRelativeToExpected int
+	MessageOffset int
+    MessageLength int
 	Data    []byte
 	Options  []layers.TCPOption
 }
