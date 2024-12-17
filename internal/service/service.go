@@ -176,6 +176,42 @@ func Start(config ServiceConfig) (err error) {
 			if p.TCP.SeqRelativeToInitial != 0 {
 				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
 			}
+
+			if p.TCP.MessageLength != 0 {
+				if p.TCP.Data != nil {
+					return fmt.Errorf("MessageLength specified with a payload data")
+				}
+				if config.Message == nil {
+					return fmt.Errorf("MessageLength specified without a message")
+				}
+				if config.Message.DataHex == "" {
+					return fmt.Errorf("MessageLength specified without a message data")
+				}
+				msgBytes, err := hex.DecodeString(config.Message.DataHex)
+				if err != nil {
+					return err
+				}
+
+				messageOffsetBytes := p.TCP.MessageOffset * 8 // Message Offset is in 8-byte units
+				var length int
+				if p.TCP.MessageLength == -1 { // Take the entire remainder
+					length = len(msgBytes) - messageOffsetBytes
+					if length < 1 {
+						return fmt.Errorf("Invalid segment offset: offset beyond message size")
+					}
+				} else {
+					length = p.TCP.MessageLength
+				}
+
+				endPos := messageOffsetBytes + length
+				if endPos > len(msgBytes) {
+					return fmt.Errorf("Segment out of range")
+				}
+				segmentPayload := msgBytes[messageOffsetBytes:endPos]
+
+				p.TCP.Data = segmentPayload
+			}
+
 			packet, err := assembler.New().
 				AddLayer(ethernet.New(&p.Ethernet)).
 				AddLayer(ip.New(&p.IP)).

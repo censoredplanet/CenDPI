@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=./cendpi-schema.json
+interface: en0
+pcapPath: test.pcap
+srcMac: f4:d4:88:74:62:40
+dstMac: 7c:10:c9:72:ef:c0
+bpf: tcp and src host 192.168.0.2
+
+message:
+  dataHex: 160301013b010001370303a45f03c5419c6a621c0cf5e7de318e2761e0ace5354d29e7ccbfd25ae28bebfa2070937f7c95b12b08af6e75e8363be12bb22a924ff667ee78fc6451f3620ecc0d0062130313021301cca9cca8ccaac030c02cc028c024c014c00a009f006b0039ff8500c400880081009d003d003500c00084c02fc02bc027c023c013c009009e0067003300be0045009c003c002f00ba0041c011c00700050004c012c0080016000a00ff0100008c002b0009080304030303020301003300260024001d00200b355f022c744a6ebc964d291a9829b02de9f5faf806b50e1970be1ee1c727530000000f000d00000a676f6f676c652e636f6d000b00020100000a000a0008001d001700180019000d00180016080606010603080505010503080404010403020102030010000e000c02683208687474702f312e31
+
+packets:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33345
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+    delay: 1
+      
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33346
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33347
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 0
+      messageLength: 64
+    delay: 1
+
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33348
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 8
+      messageLength: -1
+    delay: 1
+
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33349
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
+        fin: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
+      tos: 0
+      ttl: 64
+      id: 33350
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        ack: true
