@@ -159,11 +159,15 @@
                 "srcPort": {"type":"integer","minimum":0,"maximum":65535},
                 "dstPort": {"type":"integer","minimum":0,"maximum":65535,"default":80},
                 "window": {"type":"integer","minimum":0,"maximum":65535,"default":65535},
-                "seq": {
+                "seqRelativeToInitial": {
                   "type": "integer",
                   "default": 0
                 },
-                "ack": {
+                "seqRelativeToExpected": {
+                  "type": "integer",
+                 "default": 0
+                },
+                "ackRelativeToExpected": {
                   "type": "integer",
                   "default": 0
                 },
