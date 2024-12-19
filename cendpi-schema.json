@@ -43,6 +43,13 @@
                 "maximum": 65535,
                 "default": 65535
               },
+              "urgentPointer": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "default": 0,
+                "description": "16-bit urgent pointer value"
+              },
               "seqRelativeToInitial": {
                 "type": "integer",
                 "default": 0
@@ -127,6 +134,13 @@
                 "tos": {"type":"integer","minimum":0,"maximum":255,"default":0},
                 "ttl": {"type":"integer","minimum":0,"maximum":255,"default":64},
                 "id": {"type":"integer","minimum":0,"maximum":65535,"default":0},
+                "protocol": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "default": 6,
+                  "description": "IP protocol number. Defaults to 6 (TCP) if not specified."
+                },
                 "fragmentOffset": {
                   "type":"integer",
                   "minimum":0,
@@ -148,6 +162,23 @@
                   "type": "integer",
                   "minimum": 1,
                   "description": "If taking payload from Message, length of the fragment to extract"
+                },
+                "ipOptions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "ipOptionType": {"type":"integer","minimum":0,"maximum":255},
+                      "ipOptionLength": {"type":"integer","minimum":2,"maximum":255},
+                      "ipOptionData": {
+                        "type":"string",
+                        "pattern":"^[0-9A-Fa-f]*$",
+                        "description":"Hex-encoded option data"
+                      }
+                    },
+                    "required": ["ipOptionType","ipOptionLength"],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": ["srcIp", "dstIp", "ttl"],
@@ -159,6 +190,13 @@
                 "srcPort": {"type":"integer","minimum":0,"maximum":65535},
                 "dstPort": {"type":"integer","minimum":0,"maximum":65535,"default":80},
                 "window": {"type":"integer","minimum":0,"maximum":65535,"default":65535},
+                "urgentPointer": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535,
+                  "default": 0,
+                  "description": "16-bit urgent pointer value"
+                },
                 "seqRelativeToInitial": {
                   "type": "integer",
                   "default": 0

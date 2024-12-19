@@ -46,11 +46,19 @@ type IPYaml struct {
 	DstIP          string `yaml:"dstIp"`
 	TOS            uint8  `yaml:"tos"`
 	TTL            uint8  `yaml:"ttl"`
-	Id			   uint16  `yaml:"id"`
+	Id			   uint16 `yaml:"id"`
+	Protocol       *uint8 `yaml:"protocol,omitempty"`
 	FragmentOffset *int   `yaml:"fragmentOffset,omitempty"`
 	MessageOffset  *int   `yaml:"messageOffset,omitempty"`
 	MessageLength  *int   `yaml:"messageLength,omitempty"`
 	MoreFragments  bool   `yaml:"moreFragments,omitempty"`
+	IPOptions      []IPOptionYaml `yaml:"ipOptions,omitempty"`
+}
+
+type IPOptionYaml struct {
+    IpOptionType   uint8  `yaml:"ipOptionType"`
+    IpOptionLength uint8  `yaml:"ipOptionLength"`
+    IpOptionData   string `yaml:"ipOptionData,omitempty"`
 }
 
 type TCPFlags struct {
@@ -74,6 +82,7 @@ type TCPYaml struct {
 	DstPort       uint16          `yaml:"dstPort"`
 	Window        uint16          `yaml:"window"`
 	Flags         TCPFlags        `yaml:"flags"`
+	UrgentPointer *int 			  `yaml:"urgentPointer,omitempty"`
 	Data          string          `yaml:"data,omitempty"`
 	TCPOptions    []TCPOptionYaml `yaml:"tcpOptions,omitempty"`
 	SeqRelativeToInitial *int    `yaml:"seqRelativeToInitial,omitempty"`
@@ -115,6 +124,7 @@ func parseConfig(data []byte) *service.ServiceConfig {
 				SrcPort: layers.TCPPort(config.Message.TCP.SrcPort),
 				DstPort: layers.TCPPort(config.Message.TCP.DstPort),
 				Window:  config.Message.TCP.Window,
+				Urgent:  uint16(valOrZero(config.Message.TCP.UrgentPointer)),
 				SYN:     config.Message.TCP.Flags.SYN,
 				ACK:     config.Message.TCP.Flags.ACK,
 				PSH:     config.Message.TCP.Flags.PSH,
@@ -176,16 +186,41 @@ func parseConfig(data []byte) *service.ServiceConfig {
 		p.Ethernet.SrcMAC, p.Ethernet.DstMAC = srcMAC, dstMAC
 		p.IP.SrcIP, p.IP.DstIP = net.ParseIP(c.IP.SrcIP), net.ParseIP(c.IP.DstIP)
 		p.IP.TOS, p.IP.TTL, p.IP.Id = c.IP.TOS, c.IP.TTL, c.IP.Id
+		protocol := layers.IPProtocolTCP // default to TCP
+		if c.IP.Protocol != nil {
+			protocol = layers.IPProtocol(*c.IP.Protocol)
+		}
+		p.IP.Protocol = protocol
 
 		p.IP.FragmentOffset = valOrZero(c.IP.FragmentOffset)
 		p.IP.MessageOffset = valOrZero(c.IP.MessageOffset)
 		p.IP.MessageLength = valOrZero(c.IP.MessageLength)
 		p.IP.MoreFragments = c.IP.MoreFragments
 
+		// Parse IP Options
+		if len(c.IP.IPOptions) > 0 {
+			for _, opt := range c.IP.IPOptions {
+				var optData []byte
+				if opt.IpOptionData != "" {
+					var err error
+					optData, err = hex.DecodeString(opt.IpOptionData)
+					if err != nil {
+						log.Fatalf("Invalid hex in IP Option data: %v", err)
+					}
+				}
+				p.IP.Options = append(p.IP.Options, layers.IPv4Option{
+					OptionType:   opt.IpOptionType,
+					OptionLength: opt.IpOptionLength,
+					OptionData:   optData,
+				})
+			}
+		}
+
 		// TCP might be omitted for IP-only packets
 		if c.TCP != nil {
 			p.TCP.SrcPort, p.TCP.DstPort = layers.TCPPort(c.TCP.SrcPort), layers.TCPPort(c.TCP.DstPort)
 			p.TCP.Window = c.TCP.Window
+			p.TCP.Urgent = uint16(valOrZero(c.TCP.UrgentPointer))
 			p.TCP.SYN, p.TCP.ACK, p.TCP.PSH, p.TCP.FIN = c.TCP.Flags.SYN, c.TCP.Flags.ACK, c.TCP.Flags.PSH, c.TCP.Flags.FIN
 			p.TCP.RST, p.TCP.URG, p.TCP.ECE = c.TCP.Flags.RST, c.TCP.Flags.URG, c.TCP.Flags.ECE
 			p.TCP.SeqRelativeToInitial = valOrZero(c.TCP.SeqRelativeToInitial)
@@ -254,9 +289,6 @@ func main() {
 	}
 
 	config := parseConfig(ymlData)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// If command line IPs and ports are provided, override
 	var overrideSrcIP, overrideDstIP net.IP

@@ -20,6 +20,7 @@ type TCPConfig struct {
 	SrcPort layers.TCPPort
 	DstPort layers.TCPPort
 	Window  uint16
+	Urgent 	uint16
 	Seq     uint32
 	Ack     uint32
 	SYN     bool
@@ -53,6 +54,7 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 		SrcPort: t.config.SrcPort,
 		DstPort: t.config.DstPort,
 		Window:  t.config.Window,
+		Urgent:  t.config.Urgent,
 		SYN:     t.config.SYN,
 		ACK:     t.config.ACK,
 		PSH:     t.config.PSH,
@@ -101,6 +103,7 @@ func BuildAndSerialize(tcpConfig *TCPConfig, srcIP, dstIP net.IP) ([]byte, error
 		URG:     tcpConfig.URG,
 		ECE:     tcpConfig.ECE,
 		Window:  tcpConfig.Window,
+		Urgent:  tcpConfig.Urgent,
 	}
 
 	if len(tcpConfig.Data) > 0 {

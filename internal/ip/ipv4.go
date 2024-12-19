@@ -13,6 +13,7 @@ type IPConfig struct {
 	IHL            uint8
 	TOS            uint8
 	Id             uint16
+	Protocol       layers.IPProtocol
 	TTL            uint8
 	Options        []layers.IPv4Option
 	Padding        []byte
@@ -50,8 +51,8 @@ func (i *IPLayer) Build() (gopacket.SerializableLayer, error) {
 		TTL:        i.config.TTL,
 		SrcIP:      i.config.SrcIP,
 		DstIP:      i.config.DstIP,
-		// we assume the Protocol is always TCP.
-		Protocol: layers.IPProtocolTCP,
+		Protocol: 	i.config.Protocol,
+		Options:  	i.config.Options,
 	}
 
 	// Handle fragmentation fields if needed

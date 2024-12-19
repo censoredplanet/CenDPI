@@ -106,6 +106,18 @@ To run the program on your host machine (with root privileges):
 sudo ./cendpi -config config.yml
 ```
 
+#### Drop outgoing RSTs
+
+```bash
+sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
+```
+
+#### Turn off segmentation offloading (optional)
+
+```bash
+sudo ethtool -K eth0 gro off gso off tso off
+```
+
 #### macOS host machine
 
 To run directly on macOS, you can configure the firewall settings with `pfctl` to drop outgoing RST packets sent by the OS. You need to edit the `\etc\pf.conf` file (*remember to back up original configuration*), and add the following:
