@@ -16,94 +16,98 @@
       },
       "message": {
         "type": "object",
-        "description": "Optional higher-layer message to be fragmented/segmented",
+        "description": "Application-layer payload configuration",
         "properties": {
-          "dataHex": {
-            "type": "string",
-            "pattern": "^[0-9A-Fa-f]+$",
-            "description": "Hex-encoded data (raw message)."
-          },
-          "tcp": {
+          "http": {
             "type": "object",
+            "description": "Options for constructing an HTTP request payload",
             "properties": {
-              "srcPort": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 65535
-              },
-              "dstPort": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 65535,
-                "default": 80
-              },
-              "window": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 65535,
-                "default": 65535
-              },
-              "urgentPointer": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 65535,
-                "default": 0,
-                "description": "16-bit urgent pointer value"
-              },
-              "seqRelativeToInitial": {
-                "type": "integer",
-                "default": 0
-              },
-              "seqRelativeToExpected": {
-                "type": "integer",
-                "default": 0
-              },
-              "ackRelativeToExpected": {
-                "type": "integer",
-                "default": 0
-              },
-              "flags": {
-                "type": "object",
-                "properties": {
-                  "syn": {"type":"boolean","default":false},
-                  "ack": {"type":"boolean","default":false},
-                  "psh": {"type":"boolean","default":false},
-                  "fin": {"type":"boolean","default":false},
-                  "rst": {"type":"boolean","default":false},
-                  "urg": {"type":"boolean","default":false},
-                  "ece": {"type":"boolean","default":false}
-                }
-              },
-              "data": {
+              "method": {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
-                "description": "Base64-encoded data for the TCP segment payload."
+                "description": "HTTP method (e.g., GET, POST)"
               },
-              "tcpOptions": {
+              "path": {
+                "type": "string",
+                "description": "The request path (e.g., /)"
+              },
+              "version": {
+                "type": "string",
+                "description": "HTTP request version"
+              }
+            },
+            "required": ["method", "path", "version"],
+            "additionalProperties": false
+          },
+          "tls": {
+            "type": "object",
+            "description": "Configuration for building and slicing multiple TLS records",
+            "properties": {
+              "clientHelloConfig": {
+                "type": "object",
+                "description": "For constructing a ClientHello handshake message",
+                "properties": {
+                  "chVersion": {
+                    "type": "string",
+                    "pattern": "^[0-9A-Fa-f]{4}$",
+                    "description": "4 hex digits for the ClientHello legacy_version (e.g. '0303')",
+                    "default": "0303"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "records": {
                 "type": "array",
+                "description": "List of TLS records to build in order, some may slice from clienthello",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "tcpOptionType": {"type":"integer"},
-                    "tcpOptionLength": {"type":"integer","minimum":0},
-                    "tcpOptionData": {
-                      "type":"string",
-                      "pattern":"^[0-9A-Fa-f]*$"
+                    "contentType": {
+                      "type": "string",
+                      "pattern": "^[0-9A-Fa-f]{2}$",
+                      "description": "1-byte hex for the TLS record layer type, e.g. '16'"
+                    },
+                    "recordVersion": {
+                      "type": "string",
+                      "pattern": "^[0-9A-Fa-f]{4}$",
+                      "description": "2-byte hex for the TLS record layer version, e.g. '0303'"
+                    },
+                    "payloadType": {
+                     "type": "string",
+                      "enum": [
+                        "clienthello",
+                        "hello_request",
+                        "empty_handshake",
+                        "empty_record",
+                        "alert_warning"
+                      ],
+                      "description": "What to put in this record's payload"
+                    },
+                    "offset": {
+                      "type": "integer",
+                      "description": "Slice offset for clienthello (if payloadType=clienthello). <IN BYTES>",
+                      "default": 0
+                    },
+                    "length": {
+                      "type": "integer",
+                      "description": "Slice length for clienthello. -1 => until end. <IN BYTES>",
+                      "default": 0
+                    },
+                   "alertReasonHex": {
+                      "type": "string",
+                      "pattern": "^[0-9A-Fa-f]{2}$",
+                      "description": "1-byte hex reason for alert_warning",
+                      "default": "00"
                     }
                   },
-                  "required": ["tcpOptionType"],
+                  "required": ["contentType","recordVersion","payloadType"],
                   "additionalProperties": false
                 }
               }
             },
-            "required": ["srcPort","dstPort","window"],
+            "required": ["clientHelloConfig","records"],
             "additionalProperties": false
           }
         },
-        "oneOf": [
-          {"required": ["dataHex"]},
-          {"required": ["tcp"]}
-        ],
         "additionalProperties": false
       },
       "packets": {
@@ -156,12 +160,12 @@
                 "messageOffset": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "If taking payload from Message, offset in 8-byte units"
+                  "description": "If taking payload from Message. <Offset in 8-byte units>"
                 },
                 "messageLength": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "If taking payload from Message, length of the fragment to extract"
+                  "description": "Length of the fragment to extract. <In BYTES>"
                 },
                 "ipOptions": {
                   "type": "array",
@@ -245,12 +249,12 @@
                 "messageOffset": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "If taking payload from Message, offset in 8-byte units"
+                  "description": "If taking payload from Message. <Offset in BYTES>"
                 },
                 "messageLength": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "If taking payload from Message, length of the fragment to extract"
+                  "description": "Length of the fragment to extract. <IN BYTES>"
                 }
               },
               "required": ["srcPort","dstPort","window"],

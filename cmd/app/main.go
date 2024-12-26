@@ -1,15 +1,15 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"flag"
 	"log"
+	"fmt"
 	"net"
 	"os"
-	"strings"
 	"github.com/censoredplanet/CenDPI/internal/service"
-	"github.com/censoredplanet/CenDPI/internal/tcp"
+	"github.com/censoredplanet/CenDPI/internal/http"
+	"github.com/censoredplanet/CenDPI/internal/tls"
 	"github.com/gopacket/gopacket/layers"
 	"gopkg.in/yaml.v3"
 )
@@ -22,11 +22,37 @@ type Config struct {
 	DstMac   string    `yaml:"dstMac"`
 	Message  *Message  `yaml:"message,omitempty"`
 	Packets  []Packet  `yaml:"packets"`
+	Domain	 string
+    Protocol string
 }
 
 type Message struct {
-	DataHex string   `yaml:"dataHex,omitempty"`
-	TCP     *TCPYaml `yaml:"tcp,omitempty"`
+    HTTP    *HTTPMessageConf `yaml:"http,omitempty"`
+    TLS     *TLSMessageConf  `yaml:"tls,omitempty"`
+}
+
+type HTTPMessageConf struct {
+    Method  string            `yaml:"method"`
+    Path    string            `yaml:"path"`
+    Version string            `yaml:"version,omitempty"`
+}
+
+type TLSMessageConf struct {
+    ClientHelloConfig ClientHelloYaml    `yaml:"clientHelloConfig"`
+    Records           []TLSRecordYaml    `yaml:"records"`
+}
+
+type ClientHelloYaml struct {
+    ChVersion 	 	 string `yaml:"chVersion"`
+}
+
+type TLSRecordYaml struct {
+    ContentType     string `yaml:"contentType"`    // 2 hex digits
+    RecordVersion   string `yaml:"recordVersion"`  // 4 hex digits
+    PayloadType     string `yaml:"payloadType"`    // e.g. "clienthello"
+    Offset          int    `yaml:"offset,omitempty"`
+    Length          int    `yaml:"length,omitempty"`
+    AlertReasonHex  string `yaml:"alertReasonHex,omitempty"`
 }
 
 type Packet struct {
@@ -99,77 +125,70 @@ func valOrZero(p *int) int {
     return *p
 }
 
-func parseConfig(data []byte) *service.ServiceConfig {
-	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		log.Fatal(err)
-	}
+func parseConfig(data []byte) (*Config, error) {
+    var config Config
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, err
+    }
+    return &config, nil
+}
+
+func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 
 	serviceConfig := service.ServiceConfig{
-		Iface:    config.Iface,
-		PcapPath: config.PcapPath,
-		BPF:      config.BPF,
-		SrcMAC:   config.SrcMac,
-		DstMAC:   config.DstMac,
+		Iface:    	config.Iface,
+		PcapPath: 	config.PcapPath,
+		BPF:      	config.BPF,
+		SrcMAC:   	config.SrcMac,
+		DstMAC:   	config.DstMac,
+		Domain:		config.Domain,
+        Protocol:	config.Protocol,
 	}
 
-	// If a message is defined, store it for runtime construction
 	if config.Message != nil {
-		msg := service.ServiceMessage{
-			DataHex: config.Message.DataHex,
-		}
+        msg := service.ServiceMessage{}
+        if config.Message.HTTP != nil {
+            msg.HTTP = &http.HTTPConfig{
+                Method:  config.Message.HTTP.Method,
+                Path:    config.Message.HTTP.Path,
+				Domain:  config.Domain,
+				Version: config.Message.HTTP.Version,
+            }
+        }
+        if config.Message.TLS != nil {
+			ch := tls.ClientHelloConfig{
+				SNI:		config.Domain,
+                ChVersion:	config.Message.TLS.ClientHelloConfig.ChVersion,
+            }
 
-		if config.Message.TCP != nil {
-			tcpConfig := tcp.TCPConfig{
-				SrcPort: layers.TCPPort(config.Message.TCP.SrcPort),
-				DstPort: layers.TCPPort(config.Message.TCP.DstPort),
-				Window:  config.Message.TCP.Window,
-				Urgent:  uint16(valOrZero(config.Message.TCP.UrgentPointer)),
-				SYN:     config.Message.TCP.Flags.SYN,
-				ACK:     config.Message.TCP.Flags.ACK,
-				PSH:     config.Message.TCP.Flags.PSH,
-				FIN:     config.Message.TCP.Flags.FIN,
-				RST:     config.Message.TCP.Flags.RST,
-				URG:     config.Message.TCP.Flags.URG,
-				ECE:     config.Message.TCP.Flags.ECE,
-				SeqRelativeToInitial: valOrZero(config.Message.TCP.SeqRelativeToInitial),
-				SeqRelativeToExpected: valOrZero(config.Message.TCP.SeqRelativeToExpected),
-				AckRelativeToExpected: valOrZero(config.Message.TCP.AckRelativeToExpected),
-				MessageOffset: valOrZero(config.Message.TCP.MessageOffset),
-    			MessageLength: valOrZero(config.Message.TCP.MessageLength),
-			}
+            var records []tls.TLSRecordConfig
+            for _, r := range config.Message.TLS.Records {
+				typeByte, err := hex.DecodeString(r.ContentType)
+                if err != nil || len(typeByte) != 1 {
+                    return nil, fmt.Errorf("invalid contentType '%s'", r.ContentType)
+                }
+                verBytes, err := hex.DecodeString(r.RecordVersion)
+                if err != nil || len(verBytes) != 2 {
+                    return nil, fmt.Errorf("invalid recordVersion '%s'", r.RecordVersion)
+                }
+                rec := tls.TLSRecordConfig{
+                    ContentType:   	typeByte[0],
+                    RecordVersion: 	[2]byte{verBytes[0], verBytes[1]},
+                    PayloadType:   	tls.TLSRecordType(r.PayloadType),
+                    Offset:        	r.Offset,
+                    Length:        	r.Length,
+                    AlertReasonHex: r.AlertReasonHex,
+                }
+                records = append(records, rec)
+            }
 
-			if config.Message.TCP.Data != "" {
-				decodedData, err := base64.StdEncoding.DecodeString(strings.TrimSpace(config.Message.TCP.Data))
-				if err != nil {
-					log.Fatal("Error decoding message TCP data:", err)
-				}
-				tcpConfig.Data = decodedData
-			}
-
-			var err error
-			// Parse TCP Options
-			if config.Message.TCP.TCPOptions != nil {
-				for _, option := range config.Message.TCP.TCPOptions {
-					tcpOption := layers.TCPOption{
-						OptionType:   layers.TCPOptionKind(option.TCPOptionType),
-						OptionLength: uint8(option.TCPOptionLength),
-					}
-					if option.TCPOptionData != "" {
-						tcpOption.OptionData, err = hex.DecodeString(option.TCPOptionData)
-						if err != nil {
-							log.Fatalf("Invalid hex in TCP Option data: %v", err)
-						}
-					}
-					tcpConfig.Options = append(tcpConfig.Options, tcpOption)
-				}
-			}
-			
-			msg.TCP = &tcpConfig
-		}
-
-		serviceConfig.Message = &msg
-	}
+            msg.TLS = &tls.TLSConfig{
+                ClientHelloConfig: 	ch,
+                Records:     		records,
+            }
+        }
+        serviceConfig.Message = &msg
+    }
 
 	packets := []service.ServicePacket{}
 	for _, c := range config.Packets {
@@ -191,7 +210,6 @@ func parseConfig(data []byte) *service.ServiceConfig {
 			protocol = layers.IPProtocol(*c.IP.Protocol)
 		}
 		p.IP.Protocol = protocol
-
 		p.IP.FragmentOffset = valOrZero(c.IP.FragmentOffset)
 		p.IP.MessageOffset = valOrZero(c.IP.MessageOffset)
 		p.IP.MessageLength = valOrZero(c.IP.MessageLength)
@@ -229,14 +247,6 @@ func parseConfig(data []byte) *service.ServiceConfig {
 			p.TCP.MessageOffset = valOrZero(c.TCP.MessageOffset)
 			p.TCP.MessageLength = valOrZero(c.TCP.MessageLength)
 
-			// If no segment/fragment specified and raw data present, decode it now
-			if c.TCP.Data != "" {
-				p.TCP.Data, err = base64.StdEncoding.DecodeString(strings.TrimSpace(c.TCP.Data))
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-
 			// Parse TCP Options
 			if c.TCP.TCPOptions != nil {
 				for _, option := range c.TCP.TCPOptions {
@@ -266,7 +276,7 @@ func parseConfig(data []byte) *service.ServiceConfig {
 		packets = append(packets, p)
 	}
 	serviceConfig.Packets = packets
-	return &serviceConfig
+	return &serviceConfig, nil
 }
 
 func main() {
@@ -280,15 +290,43 @@ func main() {
 	srcPortFlag := flag.Uint("srcport", 0, "Override source port")
 	dstPortFlag := flag.Uint("dstport", 0, "Override destination port")
 
+	domainFlag := flag.String("domain", "", "Domain name to be used in Host header or SNI")
+    httpFlag := flag.Bool("http", false, "HTTP mode")
+    httpsFlag := flag.Bool("https", false, "HTTPS mode")
+
 	configFile := flag.String("config", "", "Path to the YAML configuration file")
 	flag.Parse()
+
+	if (*httpFlag && *httpsFlag) || (!*httpFlag && !*httpsFlag) {
+        log.Fatal("Error: You must specify exactly one of -http or -https.")
+    }
+
+    if *domainFlag == "" {
+        log.Fatal("Error: -domain must be provided.")
+    }
 
 	ymlData, err := os.ReadFile(*configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	config := parseConfig(ymlData)
+	cfg, err := parseConfig(ymlData)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+	cfg.Domain = *domainFlag
+    if *httpFlag {
+        cfg.Protocol = "http"
+    } else if *httpsFlag {
+        cfg.Protocol = "https"
+    }
+
+	// Convert to service config
+    serviceConfig, err := buildServiceConfig(cfg)
+    if err != nil {
+        log.Fatal(err)
+    }
 
 	// If command line IPs and ports are provided, override
 	var overrideSrcIP, overrideDstIP net.IP
@@ -309,12 +347,12 @@ func main() {
 
 	// If overrideDstIP and overrideDstPort are provided, update the BPF
 	if overrideDstIP != nil {
-		config.BPF = "tcp and src host " + overrideDstIP.String()
+		serviceConfig.BPF = "tcp and src host " + overrideDstIP.String()
 	}
 
 	// Apply overrides to all packets
-	for i := range config.Packets {
-		p := &config.Packets[i]
+	for i := range serviceConfig.Packets {
+		p := &serviceConfig.Packets[i]
 		if overrideSrcIP != nil {
 			p.IP.SrcIP = overrideSrcIP
 		}
@@ -331,19 +369,8 @@ func main() {
 		}
 	}
 
-	// Apply overrides to Message if TCP is present
-	if config.Message != nil && config.Message.TCP != nil {
-		if overrideSrcPort != 0 {
-			config.Message.TCP.SrcPort = overrideSrcPort
-		}
-		if overrideDstPort != 0 {
-			config.Message.TCP.DstPort = overrideDstPort
-		}
-	}
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	service.Start(*config)
+	err = service.Start(*serviceConfig)
+    if err != nil {
+        log.Fatal(err)
+    }
 }

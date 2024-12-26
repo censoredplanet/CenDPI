@@ -6,14 +6,19 @@ dstMac: 7c:10:c9:72:ef:c0
 bpf: tcp and src host 192.168.0.2
 
 message:
-  tcp:
-    srcPort: 12345
-    dstPort: 80
-    window: 2056
-    flags:
-      psh: true
-      ack: true
-    data: R0VUIC8gSFRUUC8xLjENCkhvc3Q6IGdvb2dsZS5jb20NClVzZXItQWdlbnQ6IGN1cmwvOC4xLjINCkFjY2VwdDogKi8qDQoNCg==
+  tls:
+    clientHelloConfig:
+      chVersion: "0303"
+    records:
+      - contentType: "15"
+        recordVersion: "0301"
+        payloadType: "alert_warning"
+        alertReasonHex: "5a"
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 0
+        length: -1
 
 packets:
   - ethernet:
@@ -61,10 +66,16 @@ packets:
       tos: 0
       ttl: 64
       id: 33347
-      moreFragments: true
-      fragmentOffset: 0
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        psh: true
+        ack: true
       messageOffset: 0
-      messageLength: 24
+      messageLength: 7
+    delay: 1
 
   - ethernet:
     ip:
@@ -73,21 +84,14 @@ packets:
       tos: 0
       ttl: 64
       id: 33347
-      moreFragments: true
-      fragmentOffset: 3
-      messageOffset: 3
-      messageLength: 24
-
-  - ethernet:
-    ip:
-      srcIp: 192.168.0.1
-      dstIp: 192.168.0.2
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: false
-      fragmentOffset: 6
-      messageOffset: 6
+    tcp:
+      srcPort: 12345
+      dstPort: 80
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 7
       messageLength: -1
     delay: 1
 
@@ -97,7 +101,7 @@ packets:
       dstIp: 192.168.0.2
       tos: 0
       ttl: 64
-      id: 33348
+      id: 33349
     tcp:
       srcPort: 12345
       dstPort: 80
@@ -113,7 +117,7 @@ packets:
       dstIp: 192.168.0.2
       tos: 0
       ttl: 64
-      id: 33348
+      id: 33350
     tcp:
       srcPort: 12345
       dstPort: 80
