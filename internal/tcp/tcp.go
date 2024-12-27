@@ -37,6 +37,7 @@ type TCPConfig struct {
     MessageLength int
 	Data    []byte
 	Options  []layers.TCPOption
+	CorruptChecksum bool
 }
 
 type TCPLayer struct {

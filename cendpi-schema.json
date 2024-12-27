@@ -255,6 +255,11 @@
                   "type": "integer",
                   "minimum": 1,
                   "description": "Length of the fragment to extract. In bytes."
+                },
+                "corruptChecksum": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Set true to corrupt the TCP checksum"
                 }
               },
               "required": ["srcPort","dstPort","window"],

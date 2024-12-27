@@ -257,7 +257,7 @@ func Start(config ServiceConfig) (err error) {
                 AddLayer(ethernet.New(&p.Ethernet)).
                 AddLayer(ip.New(&p.IP)).
                 AddLayer(tcp.New(&p.TCP)).
-                Build()
+                Build(p.TCP.CorruptChecksum)
             if err != nil {
                 return fmt.Errorf("Packet %d: Assembler Build error: %v", n, err)
             }
@@ -325,7 +325,7 @@ func Start(config ServiceConfig) (err error) {
                 packet, err := assembler.New().
                     AddLayer(ethernet.New(&p.Ethernet)).
                     AddLayer(ip.NewWithPayload(&p.IP, fragmentPayload)).
-                    Build()
+                    Build(false)
                 if err != nil {
                     return fmt.Errorf("Packet %d: Assembler Build error: %v", n, err)
                 }

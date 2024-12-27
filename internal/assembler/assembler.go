@@ -27,16 +27,13 @@ func (a *Assembler) AddLayer(layer Layer) *Assembler {
 	return a
 }
 
-func (a *Assembler) Build() ([]byte, error) {
-	buf := gopacket.NewSerializeBuffer()
-	opts := gopacket.SerializeOptions{
-		FixLengths:       true,
-		ComputeChecksums: true,
-	}
 
-	var layersList []gopacket.SerializableLayer
+func (a *Assembler) Build(corruptTCPChecksum bool) ([]byte, error) {
+
 	var ipLayer *golayer.IPv4
-	var rawPayload []byte
+	var ipAndBelow  []gopacket.SerializableLayer
+	var tcpAndAbove []gopacket.SerializableLayer
+	var rawIPPayload  []byte
 
 	for _, layer := range a.layers {
 		l, err := layer.Build()
@@ -47,44 +44,59 @@ func (a *Assembler) Build() ([]byte, error) {
 		// Check if this is an IPv4 layer
 		if ip4, ok := l.(*golayer.IPv4); ok {
 			ipLayer = ip4
-			layersList = append(layersList, ipLayer)
+			ipAndBelow = append(ipAndBelow, ipLayer)
 
 			// If the original layer is of type *ip.IPLayer, we can get its config
 			if ipLay, ok := layer.(*ip.IPLayer); ok {
 				cfg := ipLay.Config()
 				if len(cfg.RawPayload) > 0 {
 					// We have raw IP payload to append later
-					rawPayload = cfg.RawPayload
+					rawIPPayload = cfg.RawPayload
 				}
 			}
 		} else if tcpLayer, ok := l.(*golayer.TCP); ok && ipLayer != nil { // Check if this is a TCP layer
-			// We have a TCP layer after IP
-			layersList = append(layersList, tcpLayer)
+			tcpAndAbove = append(tcpAndAbove, tcpLayer)
 			if len(tcpLayer.Payload) > 0 {
-				layersList = append(layersList, gopacket.Payload(tcpLayer.Payload))
+				tcpAndAbove = append(tcpAndAbove, gopacket.Payload(tcpLayer.Payload))
 			}
 			tcpLayer.SetNetworkLayerForChecksum(ipLayer)
 
 			// Since we found a TCP layer, rawPayload of the IP layer should not be added directly,
 			// because now we have a proper upper layer (TCP).
 			// TODO: add proper error handling if rawPayload from the IP layer is not nil and TCP layer is found.
-			rawPayload = nil
+			rawIPPayload = nil
 		} else {
-			// Non-TCP, Non-IP layers
-			layersList = append(layersList, l)
+			// ethernet
+			ipAndBelow = append(ipAndBelow, l)
 		}
 	}
 
-	// After processing all layers, if rawPayload is still present,
-	// Append it as a payload layer.
-	if rawPayload != nil {
-		layersList = append(layersList, gopacket.Payload(rawPayload))
+	if len(tcpAndAbove) > 0 && ipLayer != nil {
+		tcpAndAboveBuf := gopacket.NewSerializeBuffer()
+		tcpAndAboveOpts := gopacket.SerializeOptions{
+			FixLengths:       true,
+			ComputeChecksums: !corruptTCPChecksum, // we may want to corrupt TCP checksum
+		}
+		err := gopacket.SerializeLayers(tcpAndAboveBuf, tcpAndAboveOpts, tcpAndAbove...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize TCP and above layers: %w", err)
+		}
+		rawIPPayload = tcpAndAboveBuf.Bytes()
 	}
 
-	err := gopacket.SerializeLayers(buf, opts, layersList...)
+	if rawIPPayload != nil {
+		ipAndBelow = append(ipAndBelow, gopacket.Payload(rawIPPayload))
+	}
+
+	ipAndBelowBuf := gopacket.NewSerializeBuffer()
+	ipAndBelowOpts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true, // we always want IP checksum to be correct
+	}
+	err := gopacket.SerializeLayers(ipAndBelowBuf, ipAndBelowOpts, ipAndBelow...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize layers: %w", err)
+		return nil, fmt.Errorf("failed to serialize IP and below layers: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return ipAndBelowBuf.Bytes(), nil
 }

@@ -116,6 +116,7 @@ type TCPYaml struct {
 	AckRelativeToExpected *int    `yaml:"ackRelativeToExpected,omitempty"`
 	MessageOffset *int            `yaml:"messageOffset,omitempty"`
 	MessageLength *int            `yaml:"messageLength,omitempty"`
+	CorruptChecksum bool          `yaml:"corruptChecksum,omitempty"`
 }
 
 func valOrZero(p *int) int {
@@ -246,6 +247,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 			p.TCP.AckRelativeToExpected = valOrZero(c.TCP.AckRelativeToExpected)
 			p.TCP.MessageOffset = valOrZero(c.TCP.MessageOffset)
 			p.TCP.MessageLength = valOrZero(c.TCP.MessageLength)
+			p.TCP.CorruptChecksum = c.TCP.CorruptChecksum
 
 			// Parse TCP Options
 			if c.TCP.TCPOptions != nil {
