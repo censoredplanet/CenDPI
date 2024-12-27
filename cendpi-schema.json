@@ -84,12 +84,12 @@
                     },
                     "offset": {
                       "type": "integer",
-                      "description": "Slice offset for clienthello (if payloadType=clienthello). <IN BYTES>",
+                      "description": "Slice offset for clienthello (if payloadType=clienthello). In bytes.",
                       "default": 0
                     },
                     "length": {
                       "type": "integer",
-                      "description": "Slice length for clienthello. -1 => until end. <IN BYTES>",
+                      "description": "Slice length for clienthello. -1 => until end. In bytes.",
                       "default": 0
                     },
                    "alertReasonHex": {
@@ -160,12 +160,12 @@
                 "messageOffset": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "If taking payload from Message. <Offset in 8-byte units>"
+                  "description": "If taking payload from Message. In bytes, must be multiple of 8."
                 },
                 "messageLength": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "Length of the fragment to extract. <In BYTES>"
+                  "description": "Length of the fragment to extract. In bytes."
                 },
                 "ipOptions": {
                   "type": "array",
@@ -249,12 +249,12 @@
                 "messageOffset": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "If taking payload from Message. <Offset in BYTES>"
+                  "description": "If taking payload from Message. In bytes."
                 },
                 "messageLength": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "Length of the fragment to extract. <IN BYTES>"
+                  "description": "Length of the fragment to extract. In bytes."
                 }
               },
               "required": ["srcPort","dstPort","window"],

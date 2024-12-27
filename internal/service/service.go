@@ -234,7 +234,7 @@ func Start(config ServiceConfig) (err error) {
                     config.Message.RawBytes = rawApp
                 }
 
-                messageOffsetBytes := p.TCP.MessageOffset //* 8 // 8-byte units
+                messageOffsetBytes := p.TCP.MessageOffset // in bytes
                 var length int
                 if p.TCP.MessageLength == -1 {
                     // take entire remainder
@@ -301,7 +301,10 @@ func Start(config ServiceConfig) (err error) {
                     config.Message.RawBytes = rawTCP
                 }
 
-                messageOffsetBytes := p.IP.MessageOffset * 8
+                messageOffsetBytes := p.IP.MessageOffset
+				if messageOffsetBytes % 8 != 0 {
+					return fmt.Errorf("Packet %d: message offset for IP fragmentation must be a multiple of 8 bytes", n)
+				}
                 var length int
                 if p.IP.MessageLength == -1 {
                     length = len(config.Message.RawBytes) - messageOffsetBytes
