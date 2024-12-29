@@ -20,6 +20,7 @@ type IPConfig struct {
 	FragmentOffset int
 	MessageOffset  int
 	MessageLength  int
+	ReverseDomain  bool
 	MoreFragments  bool
 	RawPayload     []byte
 }

@@ -1,11 +1,9 @@
 package tls
 
 import (
-    "crypto/rand"
     "encoding/binary"
 	"encoding/hex"
     "fmt"
-    "io"
 )
 
 type ClientHelloConfig struct {
@@ -37,6 +35,10 @@ type TLSConfig struct {
     ClientHelloConfig 	ClientHelloConfig
     Records 			[]TLSRecordConfig // The list of records to produce
 }
+
+const clientHelloRandomHex = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
+const sessionIDHex         = "A0A1A2A3A4A5A6A7A8A9AAABACADAEAFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBF"
+const keyshareHex		   = "AFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBFA0A1A2A3A4A5A6A7A8A9AAABACADAE"
 
 func BuildTLS(cfg *TLSConfig) ([]byte, error) {
     // Build the clienthello upfront, so we can slice from it if needed.
@@ -80,13 +82,20 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
     }
     legacyVersion := [2]byte{verBytes[0], verBytes[1]}
 
-    randomBytes := make([]byte, 32)
-    if _, err := io.ReadFull(rand.Reader, randomBytes); err != nil {
-        return nil, fmt.Errorf("failed to get random for ClientHello random: %v", err)
+    randomBytes, err := hex.DecodeString(clientHelloRandomHex)
+    if err != nil {
+        return nil, fmt.Errorf("failed to decode clientHelloRandomHex: %v", err)
     }
-    sessionID := make([]byte, 32)
-    if _, err := io.ReadFull(rand.Reader, sessionID); err != nil {
-        return nil, fmt.Errorf("failed to get random for session ID: %v", err)
+    if len(randomBytes) != 32 {
+        return nil, fmt.Errorf("clientHelloRandomHex must represent exactly 32 bytes")
+    }
+
+    sessionID, err := hex.DecodeString(sessionIDHex)
+    if err != nil {
+        return nil, fmt.Errorf("failed to decode sessionIDHex: %v", err)
+    }
+    if len(sessionID) != 32 {
+        return nil, fmt.Errorf("sessionIDHex must represent exactly 32 bytes")
     }
 
     cipherSuites := []uint16{
@@ -224,10 +233,13 @@ func buildSupportedVersionsExtension() []byte {
 func buildKeyShareExtension() ([]byte, error) {
     // x25519 = 0x001d
     group := uint16(0x001d)
-    keyLen := 32
-    key := make([]byte, keyLen)
-    if _, err := io.ReadFull(rand.Reader, key); err != nil {
-        return nil, fmt.Errorf("failed to read random for key share: %v", err)
+	keyLen := 32
+    key, err := hex.DecodeString(keyshareHex)
+    if err != nil {
+        return nil, fmt.Errorf("failed to decode key for key_share: %v", err)
+    }
+    if len(key) != 32 {
+        return nil, fmt.Errorf("keyShareHex must be exactly 32 bytes")
     }
     // KeyShareEntry:
     //   group(2) + key_exchange_length(2) + key_exchange_data(32)

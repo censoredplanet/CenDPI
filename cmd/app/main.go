@@ -77,6 +77,7 @@ type IPYaml struct {
 	FragmentOffset *int   `yaml:"fragmentOffset,omitempty"`
 	MessageOffset  *int   `yaml:"messageOffset,omitempty"`
 	MessageLength  *int   `yaml:"messageLength,omitempty"`
+	ReverseDomain    bool   `yaml:"reverseDomain,omitempty"`
 	MoreFragments  bool   `yaml:"moreFragments,omitempty"`
 	IPOptions      []IPOptionYaml `yaml:"ipOptions,omitempty"`
 }
@@ -116,6 +117,7 @@ type TCPYaml struct {
 	AckRelativeToExpected *int    `yaml:"ackRelativeToExpected,omitempty"`
 	MessageOffset *int            `yaml:"messageOffset,omitempty"`
 	MessageLength *int            `yaml:"messageLength,omitempty"`
+	ReverseDomain 	bool 		  `yaml:"reverseDomain,omitempty"`
 	CorruptChecksum bool          `yaml:"corruptChecksum,omitempty"`
 }
 
@@ -215,6 +217,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 		p.IP.MessageOffset = valOrZero(c.IP.MessageOffset)
 		p.IP.MessageLength = valOrZero(c.IP.MessageLength)
 		p.IP.MoreFragments = c.IP.MoreFragments
+		p.IP.ReverseDomain = c.IP.ReverseDomain
 
 		// Parse IP Options
 		if len(c.IP.IPOptions) > 0 {
@@ -248,6 +251,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 			p.TCP.MessageOffset = valOrZero(c.TCP.MessageOffset)
 			p.TCP.MessageLength = valOrZero(c.TCP.MessageLength)
 			p.TCP.CorruptChecksum = c.TCP.CorruptChecksum
+			p.TCP.ReverseDomain = c.TCP.ReverseDomain
 
 			// Parse TCP Options
 			if c.TCP.TCPOptions != nil {

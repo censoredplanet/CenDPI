@@ -35,6 +35,7 @@ type TCPConfig struct {
 	AckRelativeToExpected int
 	MessageOffset int
     MessageLength int
+	ReverseDomain bool
 	Data    []byte
 	Options  []layers.TCPOption
 	CorruptChecksum bool
@@ -128,4 +129,53 @@ func BuildAndSerialize(tcpConfig *TCPConfig, srcIP, dstIP net.IP) ([]byte, error
 	}
 
 	return buf.Bytes(), nil
+}
+
+// RearrangeDomainIn16BitChunks takes a domain string (ASCII bytes). If the length of the domain is odd,
+// we also skip the last byte as a suffix. This leaves a middle portion with an even
+// number of bytes. We then break the middle portion into 2-byte chunks and reverse the
+// order of those chunks.
+func RearrangeDomainIn16BitChunks(domain string) string {
+    dBytes := []byte(domain)
+    n := len(dBytes)
+    if n == 0 {
+        return domain
+    }
+
+    suffix := []byte{}
+    end := n
+    if n%2 != 0 {
+        // keep the last byte as suffix
+        suffix = dBytes[n-1 : n]
+        end = n - 1
+    }
+	middle := dBytes[0:end]
+	if len(middle) <= 0 {
+		return domain
+	}
+    reversed := reverseChunks2(middle)
+    return string(reversed) + string(suffix)
+}
+
+func reverseChunks2(b []byte) []byte {
+    length := len(b)
+    if length%2 != 0 {
+        // should not happen if called properly
+        return b
+    }
+    chunkCount := length / 2
+
+    rev := make([]byte, length)
+    // i-th chunk from the front goes to i-th chunk from the back
+    for i := 0; i < chunkCount; i++ {
+        // chunk i => (b[2i], b[2i+1])
+        srcIdx := 2 * i
+        // chunk from the end => chunkCount-1 - i
+        dstChunk := chunkCount - 1 - i
+        dstIdx := 2 * dstChunk
+
+        rev[dstIdx] = b[srcIdx]
+        rev[dstIdx+1] = b[srcIdx+1]
+    }
+    return rev
 }

@@ -167,6 +167,11 @@
                   "minimum": 1,
                   "description": "Length of the fragment to extract. In bytes."
                 },
+                "reverseDomain": {
+                  "type": "boolean",
+                  "description": "If true, use the reverse of domain in request (same TCP checksum)",
+                  "default": false
+                },
                 "ipOptions": {
                   "type": "array",
                   "items": {
@@ -255,6 +260,11 @@
                   "type": "integer",
                   "minimum": 1,
                   "description": "Length of the fragment to extract. In bytes."
+                },
+                "reverseDomain": {
+                  "type": "boolean",
+                  "description": "If true, use the reverse of domain in request (same TCP checksum)",
+                  "default": false
                 },
                 "corruptChecksum": {
                   "type": "boolean",

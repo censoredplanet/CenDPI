@@ -33,9 +33,10 @@ type ServiceConfig struct {
 }
 
 type ServiceMessage struct {
-    HTTP     *http.HTTPConfig
-    TLS      *tls.TLSConfig
-    RawBytes []byte // to be built once from buildMessage
+    HTTP     	  *http.HTTPConfig
+    TLS      	  *tls.TLSConfig
+	TestBytes     []byte // built with the original domain
+    ControlBytes  []byte // built with the control domain
 }
 
 type ServicePacket struct {
@@ -123,34 +124,64 @@ func sendAndCollect(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, pk
     return nil
 }
 
-func buildMessage(cfg ServiceConfig) ([]byte, error) {
+func buildSingleMessage(cfg ServiceConfig, domain string) ([]byte, error) {
     if cfg.Message == nil {
-        return nil, fmt.Errorf("no Message config present")
+        return nil, fmt.Errorf("buildSingleMessage: no Message config present")
     }
+
     switch cfg.Protocol {
     case "http":
-		if cfg.Message.HTTP == nil {
-			return nil, fmt.Errorf("HTTP config is nil")
-		}
-        req, err := http.BuildHTTPRequest(cfg.Message.HTTP)
-		if err != nil {
-			return nil, fmt.Errorf("http.BuildRequest error: %v", err)
-		}
-        return []byte(req), nil
+        if cfg.Message.HTTP == nil {
+            return nil, fmt.Errorf("HTTP config is nil")
+        }
+        oldDomain := cfg.Message.HTTP.Domain
+        cfg.Message.HTTP.Domain = domain
+
+        httpBytes, err := http.BuildHTTPRequest(cfg.Message.HTTP)
+
+        cfg.Message.HTTP.Domain = oldDomain
+        if err != nil {
+            return nil, fmt.Errorf("error building HTTP request: %v", err)
+        }
+        return []byte(httpBytes), nil
 
     case "https":
-		if cfg.Message.TLS == nil {
-			return nil, fmt.Errorf("TLS config is nil")
-		}
+        if cfg.Message.TLS == nil {
+            return nil, fmt.Errorf("TLS config is nil")
+        }
+		oldSNI := cfg.Message.TLS.ClientHelloConfig.SNI
+        cfg.Message.TLS.ClientHelloConfig.SNI = domain
+
         tlsBytes, err := tls.BuildTLS(cfg.Message.TLS)
-		if err != nil {
-			return nil, fmt.Errorf("tls.BuildTLS error: %v", err)
-		}
-		return []byte(tlsBytes), nil
+
+        cfg.Message.TLS.ClientHelloConfig.SNI = oldSNI
+        if err != nil {
+            return nil, fmt.Errorf("error building TLS handshake: %v", err)
+        }
+        return tlsBytes, nil
 
     default:
         return nil, fmt.Errorf("unsupported protocol: %s", cfg.Protocol)
     }
+}
+
+// buildMessages builds both test and control payloads
+func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
+    testBytes, err := buildSingleMessage(cfg, cfg.Domain)
+    if err != nil {
+        return nil, nil, fmt.Errorf("building test message: %w", err)
+    }
+
+    // reverse the domain
+    controlDomain := tcp.RearrangeDomainIn16BitChunks(cfg.Domain)
+	//fmt.Printf("Control Domain: %s\n", controlDomain)
+
+   	controlBytes, err := buildSingleMessage(cfg, controlDomain)
+    if err != nil {
+        return nil, nil, fmt.Errorf("building control message: %w", err)
+    }
+
+    return testBytes, controlBytes, nil
 }
 
 func Start(config ServiceConfig) (err error) {
@@ -226,19 +257,20 @@ func Start(config ServiceConfig) (err error) {
                     return fmt.Errorf("Packet %d: asked for message slicing, but config.Message is nil", n)
                 }
                 // Build the application message if not done yet
-                if len(config.Message.RawBytes) == 0 {
-                    rawApp, buildErr := buildMessage(config)
+                if len(config.Message.TestBytes) == 0 {
+                    rawTestBytes, rawControlBytes, buildErr := buildMessages(config)
                     if buildErr != nil {
-                        return fmt.Errorf("Packet %d: buildMessage error: %v", n, buildErr)
+                        return fmt.Errorf("Packet %d: buildMessages error: %v", n, buildErr)
                     }
-                    config.Message.RawBytes = rawApp
+                    config.Message.TestBytes = rawTestBytes
+					config.Message.ControlBytes = rawControlBytes
                 }
 
                 messageOffsetBytes := p.TCP.MessageOffset // in bytes
                 var length int
                 if p.TCP.MessageLength == -1 {
                     // take entire remainder
-                    length = len(config.Message.RawBytes) - messageOffsetBytes
+                    length = len(config.Message.TestBytes) - messageOffsetBytes
                     if length < 1 {
                         return fmt.Errorf("Packet %d: invalid segment offset (beyond message size)", n)
                     }
@@ -246,10 +278,14 @@ func Start(config ServiceConfig) (err error) {
                     length = p.TCP.MessageLength
                 }
                 endPos := messageOffsetBytes + length
-                if endPos > len(config.Message.RawBytes) {
+                if endPos > len(config.Message.TestBytes) {
                     return fmt.Errorf("Packet %d: segment out of range", n)
                 }
-                p.TCP.Data = config.Message.RawBytes[messageOffsetBytes:endPos]
+				if p.TCP.ReverseDomain{
+					p.TCP.Data = config.Message.ControlBytes[messageOffsetBytes:endPos]
+				} else {
+					p.TCP.Data = config.Message.TestBytes[messageOffsetBytes:endPos]
+				}
             }
 
             // Build the Ethernet/IP/TCP layers
@@ -275,16 +311,16 @@ func Start(config ServiceConfig) (err error) {
                     return fmt.Errorf("Packet %d: IP fragmentation requested but config.Message is nil", n)
                 }
                 // If we haven't built the application message yet, do so:
-                if len(config.Message.RawBytes) == 0 {
-                    rawApp, buildErr := buildMessage(config)
+                if len(config.Message.TestBytes) == 0 {
+                    rawTestBytes, rawControlBytes, buildErr := buildMessages(config)
                     if buildErr != nil {
-                        return fmt.Errorf("Packet %d: buildMessage error: %v", n, buildErr)
+                        return fmt.Errorf("Packet %d: buildMessages error: %v", n, buildErr)
                     }
                     state, ok := tcpStates[dstIPStr]
                     if !ok {
-                        fmt.Println("No TCP state found for IP fragmentation")
+                        return fmt.Errorf("Packet %d: no TCP state found for IP fragmentation", n)
                     }
-                    tcpWrap := &tcp.TCPConfig{
+                    tcpWrapTest := &tcp.TCPConfig{
                         SrcPort: state.TCPSourcePort,
                         DstPort: state.TCPDestPort,
                         Seq:     state.SeqNum,
@@ -292,13 +328,28 @@ func Start(config ServiceConfig) (err error) {
                         PSH:     true,
                         ACK:     true,
                         Window:  2056,
-                        Data:    rawApp,
+                        Data:    rawTestBytes,
                     }
-                    rawTCP, wrapErr := tcp.BuildAndSerialize(tcpWrap, p.IP.SrcIP, p.IP.DstIP)
-                    if wrapErr != nil {
-                        return fmt.Errorf("Packet %d: building TCP for IP fragmentation error: %v", n, wrapErr)
-                    }
-                    config.Message.RawBytes = rawTCP
+					tcpWrapControl := &tcp.TCPConfig{
+						SrcPort: state.TCPSourcePort,
+						DstPort: state.TCPDestPort,
+						Seq:     state.SeqNum,
+						Ack:     state.AckNum,
+						PSH:     true,
+						ACK:     true,
+						Window:  2056,
+						Data:    rawControlBytes,
+					}
+					rawTCPTest, wrapErr := tcp.BuildAndSerialize(tcpWrapTest, p.IP.SrcIP, p.IP.DstIP)
+					if wrapErr != nil {
+						return fmt.Errorf("Packet %d: building TCP for IP fragmentation error: %v", n, wrapErr)
+					}
+					rawTCPControl, wrapErr := tcp.BuildAndSerialize(tcpWrapControl, p.IP.SrcIP, p.IP.DstIP)
+					if wrapErr != nil {
+						return fmt.Errorf("Packet %d: building TCP for IP fragmentation error: %v", n, wrapErr)
+					}
+					config.Message.TestBytes = rawTCPTest
+					config.Message.ControlBytes = rawTCPControl
                 }
 
                 messageOffsetBytes := p.IP.MessageOffset
@@ -307,7 +358,7 @@ func Start(config ServiceConfig) (err error) {
 				}
                 var length int
                 if p.IP.MessageLength == -1 {
-                    length = len(config.Message.RawBytes) - messageOffsetBytes
+                    length = len(config.Message.TestBytes) - messageOffsetBytes
                     if length < 1 {
                         return fmt.Errorf("Packet %d: invalid fragment offset (beyond message size)", n)
                     }
@@ -316,10 +367,13 @@ func Start(config ServiceConfig) (err error) {
                 }
 
                 endPos := messageOffsetBytes + length
-                if endPos > len(config.Message.RawBytes) {
+                if endPos > len(config.Message.TestBytes) {
                     return fmt.Errorf("Packet %d: fragment out of range", n)
                 }
-                fragmentPayload := config.Message.RawBytes[messageOffsetBytes:endPos]
+				fragmentPayload := config.Message.TestBytes[messageOffsetBytes:endPos]
+				if p.IP.ReverseDomain{
+					fragmentPayload = config.Message.ControlBytes[messageOffsetBytes:endPos]
+				}
 
                 // Build Ethernet/IP (with the fragment payload)
                 packet, err := assembler.New().
