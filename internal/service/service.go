@@ -6,7 +6,8 @@ import (
     "log"
     "math/rand/v2"
     "time"
-
+	"net"
+	"bytes"
     "github.com/censoredplanet/CenDPI/internal/assembler"
     "github.com/censoredplanet/CenDPI/internal/ethernet"
     "github.com/censoredplanet/CenDPI/internal/ip"
@@ -15,7 +16,6 @@ import (
     "github.com/censoredplanet/CenDPI/internal/tcp"
     "github.com/censoredplanet/CenDPI/internal/http"
     "github.com/censoredplanet/CenDPI/internal/tls"
-
     "github.com/gopacket/gopacket/layers"
     "github.com/gopacket/gopacket/pcap"
 )
@@ -26,17 +26,23 @@ type ServiceConfig struct {
     BPF      string
     SrcMAC   string
     DstMAC   string
+	SrcIP	 net.IP
+	DstIP	 net.IP
+	SrcPort  layers.TCPPort
+	DstPort  layers.TCPPort
     Packets  []ServicePacket
     Message  *ServiceMessage
     Domain   string
+	IsControl bool
     Protocol string
+	Label	 string
 }
 
 type ServiceMessage struct {
-    HTTP     	  *http.HTTPConfig
-    TLS      	  *tls.TLSConfig
-	TestBytes     []byte // built with the original domain
-    ControlBytes  []byte // built with the control domain
+    HTTP     	  		*http.HTTPConfig
+    TLS      	  		*tls.TLSConfig
+	PayloadBytes     	[]byte // built with the original domain
+    ReversePayloadBytes []byte // built with the reversed domain
 }
 
 type ServicePacket struct {
@@ -46,15 +52,37 @@ type ServicePacket struct {
     Delay    int           // Per-packet delay in seconds
 }
 
+type FlowKey struct {
+    IP1   string
+    Port1 layers.TCPPort
+    IP2   string
+    Port2 layers.TCPPort
+}
+
+func NormalizeFlowKey(srcIP net.IP, srcPort layers.TCPPort, dstIP net.IP, dstPort layers.TCPPort) FlowKey {
+    a := srcIP.To16()
+    b := dstIP.To16()
+
+    cmp := bytes.Compare(a, b)
+    if cmp == 0 {
+        if srcPort < dstPort {
+            return FlowKey{IP1: srcIP.String(), Port1: srcPort, IP2: dstIP.String(), Port2: dstPort}
+        }
+        return FlowKey{IP1: dstIP.String(), Port1: dstPort, IP2: srcIP.String(), Port2: srcPort}
+    } else if cmp < 0 {
+        return FlowKey{IP1: srcIP.String(), Port1: srcPort, IP2: dstIP.String(), Port2: dstPort}
+    } else {
+        return FlowKey{IP1: dstIP.String(), Port1: dstPort, IP2: srcIP.String(), Port2: srcPort}
+    }
+}
+
 type tcpState struct {
     SeqNum     		uint32
     AckNum     		uint32
     InitialSeq 		uint32
-    TCPSourcePort 	layers.TCPPort
-    TCPDestPort  	layers.TCPPort
 }
 
-var tcpStates = make(map[string]tcpState)
+var tcpStates = make(map[FlowKey]tcpState)
 
 func wrapError(err *error, str string, args ...any) {
     if *err != nil {
@@ -63,7 +91,7 @@ func wrapError(err *error, str string, args ...any) {
     }
 }
 
-func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, duration time.Duration, dstIP string) []netcap.PacketInfo {
+func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, duration time.Duration, flowKey FlowKey) []netcap.PacketInfo {
     var packets []netcap.PacketInfo
     timer := time.NewTimer(duration)
     defer timer.Stop()
@@ -79,8 +107,7 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
             tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
             if tcpLayer != nil {
                 t := tcpLayer.(*layers.TCP)
-                states := tcpStates[dstIP]
-                curIsq := states.InitialSeq
+                states := tcpStates[flowKey]
 
                 // Calculate how much to increment Ack
                 ackIncrement := uint32(len(t.Payload))
@@ -99,12 +126,10 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
                     states.AckNum = nextAck
                 }
 
-                tcpStates[dstIP] = tcpState{
+                tcpStates[flowKey] = tcpState{
                     SeqNum:       states.SeqNum,
                     AckNum:       states.AckNum,
-                    InitialSeq:   curIsq,
-                    TCPSourcePort: states.TCPSourcePort,
-                    TCPDestPort:   states.TCPDestPort,
+                    InitialSeq:   states.InitialSeq,
                 }
             }
 
@@ -114,12 +139,12 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
     }
 }
 
-func sendAndCollect(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, pkt []byte, delay time.Duration, dstIPStr string) error {
+func sendAndCollect(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey FlowKey) error {
     if err := netCap.SendPacket(pkt); err != nil {
         return err
     }
     if delay > 0 {
-        collectPackets(netCap, packetChan, delay, dstIPStr)
+        collectPackets(netCap, packetChan, delay, flowKey)
     }
     return nil
 }
@@ -167,21 +192,21 @@ func buildSingleMessage(cfg ServiceConfig, domain string) ([]byte, error) {
 
 // buildMessages builds both test and control payloads
 func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
-    testBytes, err := buildSingleMessage(cfg, cfg.Domain)
+    payloadBytes, err := buildSingleMessage(cfg, cfg.Domain)
     if err != nil {
         return nil, nil, fmt.Errorf("building test message: %w", err)
     }
 
     // reverse the domain
-    controlDomain := tcp.RearrangeDomainIn16BitChunks(cfg.Domain)
+    reverseDomain := tcp.RearrangeDomainIn16BitChunks(cfg.Domain)
 	//fmt.Printf("Control Domain: %s\n", controlDomain)
 
-   	controlBytes, err := buildSingleMessage(cfg, controlDomain)
+   	reverseBytes, err := buildSingleMessage(cfg, reverseDomain)
     if err != nil {
-        return nil, nil, fmt.Errorf("building control message: %w", err)
+        return nil, nil, fmt.Errorf("building reverse domain message: %w", err)
     }
 
-    return testBytes, controlBytes, nil
+    return payloadBytes, reverseBytes, nil
 }
 
 func Start(config ServiceConfig) (err error) {
@@ -211,26 +236,24 @@ func Start(config ServiceConfig) (err error) {
 
     packetChan := netCap.StartPacketReceiver(ctx)
 
+	flowKey := NormalizeFlowKey(config.SrcIP, config.SrcPort, config.DstIP, config.DstPort)
     for n, p := range config.Packets {
-        dstIPStr := p.IP.DstIP.String()
+		if n == 0 {
+			initSeq := rand.Uint32()
+			tcpStates[flowKey] = tcpState{
+				SeqNum:       	initSeq,
+				AckNum:       	0,
+				InitialSeq:   	initSeq,
+			}
+		}
+
         hasTCP := (p.TCP.SrcPort != 0 || p.TCP.DstPort != 0)
 
         // --------------------------------------------------
         // Case 1: We have a TCP layer in the config
         // --------------------------------------------------
         if hasTCP {
-            // Initialize tcpState if not present
-            if _, ok := tcpStates[dstIPStr]; !ok {
-                initSeq := rand.Uint32()
-                tcpStates[dstIPStr] = tcpState{
-                    SeqNum:       	initSeq,
-                    AckNum:       	0,
-                    InitialSeq:   	initSeq,
-                    TCPSourcePort: 	p.TCP.SrcPort,
-                    TCPDestPort:   	p.TCP.DstPort,
-                }
-            }
-            state := tcpStates[dstIPStr]
+            state := tcpStates[flowKey]
 
             // Derive the actual Seq/Ack from state and relative offsets
             p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
@@ -257,20 +280,20 @@ func Start(config ServiceConfig) (err error) {
                     return fmt.Errorf("Packet %d: asked for message slicing, but config.Message is nil", n)
                 }
                 // Build the application message if not done yet
-                if len(config.Message.TestBytes) == 0 {
-                    rawTestBytes, rawControlBytes, buildErr := buildMessages(config)
+                if len(config.Message.PayloadBytes) == 0 {
+                    rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(config)
                     if buildErr != nil {
                         return fmt.Errorf("Packet %d: buildMessages error: %v", n, buildErr)
                     }
-                    config.Message.TestBytes = rawTestBytes
-					config.Message.ControlBytes = rawControlBytes
+                    config.Message.PayloadBytes = rawPayloadBytes
+					config.Message.ReversePayloadBytes = rawReversedPayloadBytes
                 }
 
                 messageOffsetBytes := p.TCP.MessageOffset // in bytes
                 var length int
                 if p.TCP.MessageLength == -1 {
                     // take entire remainder
-                    length = len(config.Message.TestBytes) - messageOffsetBytes
+                    length = len(config.Message.PayloadBytes) - messageOffsetBytes
                     if length < 1 {
                         return fmt.Errorf("Packet %d: invalid segment offset (beyond message size)", n)
                     }
@@ -278,13 +301,13 @@ func Start(config ServiceConfig) (err error) {
                     length = p.TCP.MessageLength
                 }
                 endPos := messageOffsetBytes + length
-                if endPos > len(config.Message.TestBytes) {
+                if endPos > len(config.Message.PayloadBytes) {
                     return fmt.Errorf("Packet %d: segment out of range", n)
                 }
 				if p.TCP.ReverseDomain{
-					p.TCP.Data = config.Message.ControlBytes[messageOffsetBytes:endPos]
+					p.TCP.Data = config.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
 				} else {
-					p.TCP.Data = config.Message.TestBytes[messageOffsetBytes:endPos]
+					p.TCP.Data = config.Message.PayloadBytes[messageOffsetBytes:endPos]
 				}
             }
 
@@ -298,7 +321,7 @@ func Start(config ServiceConfig) (err error) {
                 return fmt.Errorf("Packet %d: Assembler Build error: %v", n, err)
             }
 
-            if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, dstIPStr); err != nil {
+            if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, flowKey); err != nil {
                 return fmt.Errorf("Packet %d: sendAndCollect error: %v", n, err)
             }
 
@@ -311,45 +334,45 @@ func Start(config ServiceConfig) (err error) {
                     return fmt.Errorf("Packet %d: IP fragmentation requested but config.Message is nil", n)
                 }
                 // If we haven't built the application message yet, do so:
-                if len(config.Message.TestBytes) == 0 {
-                    rawTestBytes, rawControlBytes, buildErr := buildMessages(config)
+                if len(config.Message.PayloadBytes) == 0 {
+                    rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(config)
                     if buildErr != nil {
                         return fmt.Errorf("Packet %d: buildMessages error: %v", n, buildErr)
                     }
-                    state, ok := tcpStates[dstIPStr]
+                    state, ok := tcpStates[flowKey]
                     if !ok {
                         return fmt.Errorf("Packet %d: no TCP state found for IP fragmentation", n)
                     }
-                    tcpWrapTest := &tcp.TCPConfig{
-                        SrcPort: state.TCPSourcePort,
-                        DstPort: state.TCPDestPort,
+                    tcpWrap := &tcp.TCPConfig{
+                        SrcPort: config.SrcPort,
+                        DstPort: config.DstPort,
                         Seq:     state.SeqNum,
                         Ack:     state.AckNum,
                         PSH:     true,
                         ACK:     true,
                         Window:  2056,
-                        Data:    rawTestBytes,
+                        Data:    rawPayloadBytes,
                     }
-					tcpWrapControl := &tcp.TCPConfig{
-						SrcPort: state.TCPSourcePort,
-						DstPort: state.TCPDestPort,
+					tcpWrapReversedPayload := &tcp.TCPConfig{
+						SrcPort: config.SrcPort,
+                        DstPort: config.DstPort,
 						Seq:     state.SeqNum,
 						Ack:     state.AckNum,
 						PSH:     true,
 						ACK:     true,
 						Window:  2056,
-						Data:    rawControlBytes,
+						Data:    rawReversedPayloadBytes,
 					}
-					rawTCPTest, wrapErr := tcp.BuildAndSerialize(tcpWrapTest, p.IP.SrcIP, p.IP.DstIP)
+					rawTCP, wrapErr := tcp.BuildAndSerialize(tcpWrap, p.IP.SrcIP, p.IP.DstIP)
 					if wrapErr != nil {
 						return fmt.Errorf("Packet %d: building TCP for IP fragmentation error: %v", n, wrapErr)
 					}
-					rawTCPControl, wrapErr := tcp.BuildAndSerialize(tcpWrapControl, p.IP.SrcIP, p.IP.DstIP)
+					rawTCPReversed, wrapErr := tcp.BuildAndSerialize(tcpWrapReversedPayload, p.IP.SrcIP, p.IP.DstIP)
 					if wrapErr != nil {
 						return fmt.Errorf("Packet %d: building TCP for IP fragmentation error: %v", n, wrapErr)
 					}
-					config.Message.TestBytes = rawTCPTest
-					config.Message.ControlBytes = rawTCPControl
+					config.Message.PayloadBytes = rawTCP
+					config.Message.ReversePayloadBytes = rawTCPReversed
                 }
 
                 messageOffsetBytes := p.IP.MessageOffset
@@ -358,7 +381,7 @@ func Start(config ServiceConfig) (err error) {
 				}
                 var length int
                 if p.IP.MessageLength == -1 {
-                    length = len(config.Message.TestBytes) - messageOffsetBytes
+                    length = len(config.Message.PayloadBytes) - messageOffsetBytes
                     if length < 1 {
                         return fmt.Errorf("Packet %d: invalid fragment offset (beyond message size)", n)
                     }
@@ -367,12 +390,12 @@ func Start(config ServiceConfig) (err error) {
                 }
 
                 endPos := messageOffsetBytes + length
-                if endPos > len(config.Message.TestBytes) {
+                if endPos > len(config.Message.PayloadBytes) {
                     return fmt.Errorf("Packet %d: fragment out of range", n)
                 }
-				fragmentPayload := config.Message.TestBytes[messageOffsetBytes:endPos]
+				fragmentPayload := config.Message.PayloadBytes[messageOffsetBytes:endPos]
 				if p.IP.ReverseDomain{
-					fragmentPayload = config.Message.ControlBytes[messageOffsetBytes:endPos]
+					fragmentPayload = config.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
 				}
 
                 // Build Ethernet/IP (with the fragment payload)
@@ -384,7 +407,7 @@ func Start(config ServiceConfig) (err error) {
                     return fmt.Errorf("Packet %d: Assembler Build error: %v", n, err)
                 }
 
-                if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, dstIPStr); err != nil {
+                if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, flowKey); err != nil {
                     return fmt.Errorf("Packet %d: sendAndCollect error: %v", n, err)
                 }
 

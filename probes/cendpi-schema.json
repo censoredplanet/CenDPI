@@ -2,17 +2,9 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
-      "interface": {
+      "protocol": {
         "type": "string",
-        "description": "Network interface name"
-      },
-      "pcapPath": {
-        "type": "string",
-        "description": "Path to pcap file"
-      },
-      "bpf": {
-        "type": "string",
-        "description": "Berkeley Packet Filter (BPF) to apply"
+        "description": "http or https or both"
       },
       "message": {
         "type": "object",
@@ -133,8 +125,6 @@
             "ip": {
               "type": "object",
               "properties": {
-                "srcIp": {"type":"string","format":"ipv4"},
-                "dstIp": {"type":"string","format":"ipv4"},
                 "tos": {"type":"integer","minimum":0,"maximum":255,"default":0},
                 "ttl": {"type":"integer","minimum":0,"maximum":255,"default":64},
                 "id": {"type":"integer","minimum":0,"maximum":65535,"default":0},
@@ -190,14 +180,11 @@
                   }
                 }
               },
-              "required": ["srcIp", "dstIp", "ttl"],
               "additionalProperties": false
             },
             "tcp": {
               "type": "object",
               "properties": {
-                "srcPort": {"type":"integer","minimum":0,"maximum":65535},
-                "dstPort": {"type":"integer","minimum":0,"maximum":65535,"default":80},
                 "window": {"type":"integer","minimum":0,"maximum":65535,"default":65535},
                 "urgentPointer": {
                   "type": "integer",
@@ -272,7 +259,6 @@
                   "description": "Set true to corrupt the TCP checksum"
                 }
               },
-              "required": ["srcPort","dstPort","window"],
               "additionalProperties": false
             },
             "delay": {
@@ -286,7 +272,6 @@
         }
       }
     },
-    "required": ["interface", "pcapPath", "bpf"],
     "additionalProperties": false
   }
   

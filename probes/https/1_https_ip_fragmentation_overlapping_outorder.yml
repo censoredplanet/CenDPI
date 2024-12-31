@@ -1,15 +1,6 @@
 # yaml-language-server: $schema=./cendpi-schema.json
-interface: en0
-pcapPath: test.pcap
-srcMac: f4:d4:88:74:62:40
-dstMac: 7c:10:c9:72:ef:c0
-bpf: tcp and src host 192.168.0.2
-
+protocol: https
 message:
-  http:
-    method: GET
-    path: /
-    version: HTTP/1.1
   tls:
     clientHelloConfig:
       chVersion: "0303"
@@ -66,16 +57,11 @@ packets:
       tos: 0
       ttl: 64
       id: 33347
-    tcp:
-      srcPort: 12345
-      dstPort: 80
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 0
+      moreFragments: false
+      fragmentOffset: 22
+      messageOffset: 176
       messageLength: -1
-      corruptChecksum: true
+      reverseDomain: true
     delay: 1
 
   - ethernet:
@@ -85,16 +71,11 @@ packets:
       tos: 0
       ttl: 64
       id: 33347
-    tcp:
-      srcPort: 12345
-      dstPort: 80
-      window: 2056
-      flags:
-        psh: true
-        ack: true
+      moreFragments: true
+      fragmentOffset: 0
       messageOffset: 0
-      messageLength: -1
-      corruptChecksum: false
+      messageLength: 200
+      reverseDomain: false
     delay: 1
 
   - ethernet:

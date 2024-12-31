@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/json"
+	"math/rand"
 	"flag"
 	"log"
 	"fmt"
 	"net"
 	"os"
+    "time"
+	"bufio"
+	"strings"
 	"github.com/censoredplanet/CenDPI/internal/service"
 	"github.com/censoredplanet/CenDPI/internal/http"
 	"github.com/censoredplanet/CenDPI/internal/tls"
@@ -14,16 +19,29 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Config struct {
-	Iface    string    `yaml:"interface"`
-	PcapPath string    `yaml:"pcapPath"`
-	BPF      string    `yaml:"bpf"`
-	SrcMac   string    `yaml:"srcMac"`
-	DstMac   string    `yaml:"dstMac"`
-	Message  *Message  `yaml:"message,omitempty"`
-	Packets  []Packet  `yaml:"packets"`
-	Domain	 string
-    Protocol string
+type GlobalMeasurementConfig struct {
+    Interface  string   `yaml:"interface"`
+    PcapPath   string   `yaml:"pcapPath"`
+    SourceMAC  string   `yaml:"sourceMAC"`
+    TargetMAC  string   `yaml:"targetMAC"`
+	SourceIP   string   `yaml:"sourceIP"`
+    Probelist  []string `yaml:"probelist"`
+}
+
+type Target struct {
+    TargetIP      string `json:"TargetIP"`
+    TargetPort    uint16 `json:"TargetPort"`
+	SourcePort	  uint16 `json:"SourcePort,omitempty"`
+    TestDomain    string `json:"TestDomain"`
+    Protocol      string `json:"Protocol"`        // e.g. "http" or "https"
+    ControlDomain string `json:"ControlDomain,omitempty"`
+    Label         string `json:"Label,omitempty"`
+}
+
+type ProbeConfig struct {
+	Protocol	string 	  `yaml:"protocol"` 
+	Message  	*Message  `yaml:"message,omitempty"`
+	Packets  	[]Packet  `yaml:"packets"`
 }
 
 type Message struct {
@@ -59,7 +77,7 @@ type Packet struct {
 	Ethernet EthernetYaml `yaml:"ethernet"`
 	IP       IPYaml       `yaml:"ip"`
 	TCP      *TCPYaml     `yaml:"tcp,omitempty"`
-	Delay    *int         `yaml:"delay,omitempty"` // Add per-packet delay in seconds
+	Delay    int          `yaml:"delay,omitempty"` // Add per-packet delay in seconds
 }
 
 type EthernetYaml struct {
@@ -121,6 +139,47 @@ type TCPYaml struct {
 	CorruptChecksum bool          `yaml:"corruptChecksum,omitempty"`
 }
 
+type SourcePortOracle struct {
+    ports []uint16
+    pos   int
+}
+
+func NewSourcePortOracle(minPort, maxPort uint16) *SourcePortOracle {
+    if minPort > maxPort {
+        panic("minPort cannot be greater than maxPort")
+    }
+    total := maxPort - minPort + 1
+    portSlice := make([]uint16, total)
+
+    for i := range portSlice {
+        portSlice[i] = uint16(minPort + uint16(i))
+    }
+
+    shufflePorts(portSlice)
+
+    return &SourcePortOracle{
+        ports: portSlice,
+        pos:   0,
+    }
+}
+
+func (o *SourcePortOracle) NextPort() uint16 {
+    if o.pos >= len(o.ports) {
+        o.pos = 0
+    }
+    p := o.ports[o.pos]
+    o.pos++
+    return p
+}
+
+func shufflePorts(ports []uint16) {
+    rand.Seed(time.Now().UnixNano())
+    for i := len(ports) - 1; i > 0; i-- {
+        j := rand.Intn(i + 1)
+        ports[i], ports[j] = ports[j], ports[i]
+    }
+}
+
 func valOrZero(p *int) int {
     if p == nil {
         return 0
@@ -128,44 +187,103 @@ func valOrZero(p *int) int {
     return *p
 }
 
-func parseConfig(data []byte) (*Config, error) {
-    var config Config
-    if err := yaml.Unmarshal(data, &config); err != nil {
+func parseGlobalMeasurementConfig(path string) (*GlobalMeasurementConfig, error) {
+    data, err := os.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+    var cfg GlobalMeasurementConfig
+    if err := yaml.Unmarshal(data, &cfg); err != nil {
+        return nil, err
+    }
+    return &cfg, nil
+}
+
+func parseTargetsJSONL(path string) ([]Target, error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+
+    var results []Target
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+        line := strings.TrimSpace(scanner.Text())
+        if line == "" || strings.HasPrefix(line, "#") {
+            // skip empty lines or comment lines
+            continue
+        }
+        var tgt Target
+        if err := json.Unmarshal([]byte(line), &tgt); err != nil {
+            return nil, fmt.Errorf("json decode error on line: %s\n%v", line, err)
+        }
+        results = append(results, tgt)
+    }
+    if err := scanner.Err(); err != nil {
+        return nil, err
+    }
+    return results, nil
+}
+
+func parseProbeConfigYAML(path string) (*ProbeConfig, error) {
+    ymlData, err := os.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+	var config ProbeConfig
+    if err := yaml.Unmarshal(ymlData, &config); err != nil {
         return nil, err
     }
     return &config, nil
 }
 
-func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
+func buildServiceConfig(
+	globalConfig *GlobalMeasurementConfig,
+	target *Target, 
+	probeConfig *ProbeConfig, 
+	isControl bool,
+	portOracle *SourcePortOracle,
+) (*service.ServiceConfig, error) {
 
 	serviceConfig := service.ServiceConfig{
-		Iface:    	config.Iface,
-		PcapPath: 	config.PcapPath,
-		BPF:      	config.BPF,
-		SrcMAC:   	config.SrcMac,
-		DstMAC:   	config.DstMac,
-		Domain:		config.Domain,
-        Protocol:	config.Protocol,
+		Iface:    	globalConfig.Interface,
+		PcapPath: 	globalConfig.PcapPath,
+		BPF:      	"tcp and src host " + target.TargetIP,
+		SrcMAC:   	globalConfig.SourceMAC,
+		DstMAC:   	globalConfig.TargetMAC,
+		SrcIP:    	net.ParseIP(globalConfig.SourceIP),
+		DstIP:		net.ParseIP(target.TargetIP),
+		SrcPort:	layers.TCPPort(portOracle.NextPort()),
+		DstPort:	layers.TCPPort(target.TargetPort),
+        Protocol:	target.Protocol,
+		IsControl:  isControl,
+		Label:		target.Label,
 	}
 
-	if config.Message != nil {
+	currentDomain := target.TestDomain
+	if isControl {
+		currentDomain = target.ControlDomain
+	}
+	serviceConfig.Domain = currentDomain
+
+	if probeConfig.Message != nil {
         msg := service.ServiceMessage{}
-        if config.Message.HTTP != nil {
+        if probeConfig.Message.HTTP != nil {
             msg.HTTP = &http.HTTPConfig{
-                Method:  config.Message.HTTP.Method,
-                Path:    config.Message.HTTP.Path,
-				Domain:  config.Domain,
-				Version: config.Message.HTTP.Version,
+                Method:  probeConfig.Message.HTTP.Method,
+                Path:    probeConfig.Message.HTTP.Path,
+				Domain:  serviceConfig.Domain,
+				Version: probeConfig.Message.HTTP.Version,
             }
         }
-        if config.Message.TLS != nil {
+        if probeConfig.Message.TLS != nil {
 			ch := tls.ClientHelloConfig{
-				SNI:		config.Domain,
-                ChVersion:	config.Message.TLS.ClientHelloConfig.ChVersion,
+				SNI:		serviceConfig.Domain,
+                ChVersion:	probeConfig.Message.TLS.ClientHelloConfig.ChVersion,
             }
-
             var records []tls.TLSRecordConfig
-            for _, r := range config.Message.TLS.Records {
+            for _, r := range probeConfig.Message.TLS.Records {
 				typeByte, err := hex.DecodeString(r.ContentType)
                 if err != nil || len(typeByte) != 1 {
                     return nil, fmt.Errorf("invalid contentType '%s'", r.ContentType)
@@ -184,7 +302,6 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
                 }
                 records = append(records, rec)
             }
-
             msg.TLS = &tls.TLSConfig{
                 ClientHelloConfig: 	ch,
                 Records:     		records,
@@ -194,7 +311,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
     }
 
 	packets := []service.ServicePacket{}
-	for _, c := range config.Packets {
+	for _, c := range probeConfig.Packets {
 		p := service.ServicePacket{}
 
 		srcMAC, err := net.ParseMAC(serviceConfig.SrcMAC)
@@ -206,7 +323,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 			log.Fatal("invalid dstMAC: %w", err)
 		}
 		p.Ethernet.SrcMAC, p.Ethernet.DstMAC = srcMAC, dstMAC
-		p.IP.SrcIP, p.IP.DstIP = net.ParseIP(c.IP.SrcIP), net.ParseIP(c.IP.DstIP)
+		p.IP.SrcIP, p.IP.DstIP = serviceConfig.SrcIP, serviceConfig.DstIP
 		p.IP.TOS, p.IP.TTL, p.IP.Id = c.IP.TOS, c.IP.TTL, c.IP.Id
 		protocol := layers.IPProtocolTCP // default to TCP
 		if c.IP.Protocol != nil {
@@ -240,7 +357,7 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 
 		// TCP might be omitted for IP-only packets
 		if c.TCP != nil {
-			p.TCP.SrcPort, p.TCP.DstPort = layers.TCPPort(c.TCP.SrcPort), layers.TCPPort(c.TCP.DstPort)
+			p.TCP.SrcPort, p.TCP.DstPort = serviceConfig.SrcPort, serviceConfig.DstPort
 			p.TCP.Window = c.TCP.Window
 			p.TCP.Urgent = uint16(valOrZero(c.TCP.UrgentPointer))
 			p.TCP.SYN, p.TCP.ACK, p.TCP.PSH, p.TCP.FIN = c.TCP.Flags.SYN, c.TCP.Flags.ACK, c.TCP.Flags.PSH, c.TCP.Flags.FIN
@@ -270,113 +387,76 @@ func buildServiceConfig(config *Config) (*service.ServiceConfig, error) {
 				}
 			}
 		}
-
-		// Parse per-packet delay if specified
-		if c.Delay != nil {
-			p.Delay = *c.Delay
-		} else {
-			// If no delay is specified for this packet, default to 0 seconds (consecutive sends)
-			p.Delay = 0
-		}
-
+		p.Delay = c.Delay
 		packets = append(packets, p)
 	}
 	serviceConfig.Packets = packets
 	return &serviceConfig, nil
 }
 
+
 func main() {
-	if os.Geteuid() != 0 {
-		log.Fatal("This program must be run as root! (sudo)")
-	}
-
-	// New flags for command-line override
-	srcIPFlag := flag.String("srcip", "", "Override source IP")
-	dstIPFlag := flag.String("dstip", "", "Override destination IP")
-	srcPortFlag := flag.Uint("srcport", 0, "Override source port")
-	dstPortFlag := flag.Uint("dstport", 0, "Override destination port")
-
-	domainFlag := flag.String("domain", "", "Domain name to be used in Host header or SNI")
-    httpFlag := flag.Bool("http", false, "HTTP mode")
-    httpsFlag := flag.Bool("https", false, "HTTPS mode")
-
-	configFile := flag.String("config", "", "Path to the YAML configuration file")
-	flag.Parse()
-
-	if (*httpFlag && *httpsFlag) || (!*httpFlag && !*httpsFlag) {
-        log.Fatal("Error: You must specify exactly one of -http or -https.")
+    if os.Geteuid() != 0 {
+        log.Fatal("This program must be run as root! (sudo)")
     }
 
-    if *domainFlag == "" {
-        log.Fatal("Error: -domain must be provided.")
+    measurementConfigPath := flag.String("config", "", "Path to global measurement.config YAML")
+    targetConfigPath := flag.String("target", "", "Path to target.jsonl (line-delimited JSON)")
+
+    flag.Parse()
+    if *measurementConfigPath == "" || *targetConfigPath == "" {
+        log.Fatal("Usage: cendpi -measurement measurement.config -target target.jsonl")
     }
 
-	ymlData, err := os.ReadFile(*configFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cfg, err := parseConfig(ymlData)
+    globalCfg, err := parseGlobalMeasurementConfig(*measurementConfigPath)
     if err != nil {
-        log.Fatal(err)
+        log.Fatalf("Error parsing measurement config: %v\n", err)
     }
 
-	cfg.Domain = *domainFlag
-    if *httpFlag {
-        cfg.Protocol = "http"
-    } else if *httpsFlag {
-        cfg.Protocol = "https"
-    }
-
-	// Convert to service config
-    serviceConfig, err := buildServiceConfig(cfg)
+    targets, err := parseTargetsJSONL(*targetConfigPath)
     if err != nil {
-        log.Fatal(err)
+        log.Fatalf("Error parsing targets file: %v\n", err)
     }
 
-	// If command line IPs and ports are provided, override
-	var overrideSrcIP, overrideDstIP net.IP
-	var overrideSrcPort, overrideDstPort layers.TCPPort
+	sourcePortOracle := NewSourcePortOracle(39152, 65535)
 
-	if *srcIPFlag != "" {
-		overrideSrcIP = net.ParseIP(*srcIPFlag)
-	}
-	if *dstIPFlag != "" {
-		overrideDstIP = net.ParseIP(*dstIPFlag)
-	}
-	if *srcPortFlag != 0 {
-		overrideSrcPort = layers.TCPPort(*srcPortFlag)
-	}
-	if *dstPortFlag != 0 {
-		overrideDstPort = layers.TCPPort(*dstPortFlag)
-	}
+    // todo: add concurrency
+	for _, probeFile := range globalCfg.Probelist {
+		for _, tgt := range targets {
+            log.Printf("Measuring target %s:%d (domain=%s) with probe '%s'\n",
+                tgt.TargetIP, tgt.TargetPort, tgt.TestDomain, probeFile)
 
-	// If overrideDstIP and overrideDstPort are provided, update the BPF
-	if overrideDstIP != nil {
-		serviceConfig.BPF = "tcp and src host " + overrideDstIP.String()
-	}
+            probeCfg, err := parseProbeConfigYAML(probeFile)
+            if err != nil {
+                log.Printf("Skipping probe %s: %v\n", probeFile, err)
+                continue
+            }
 
-	// Apply overrides to all packets
-	for i := range serviceConfig.Packets {
-		p := &serviceConfig.Packets[i]
-		if overrideSrcIP != nil {
-			p.IP.SrcIP = overrideSrcIP
-		}
-		if overrideDstIP != nil {
-			p.IP.DstIP = overrideDstIP
-		}
-		if p.TCP.SrcPort != 0 || p.TCP.DstPort != 0 { // TCP layer is defined
-			if overrideSrcPort != 0 {
-				p.TCP.SrcPort = overrideSrcPort
+			if probeCfg.Protocol != "both" && probeCfg.Protocol != tgt.Protocol {
+				continue
 			}
-			if overrideDstPort != 0 {
-				p.TCP.DstPort = overrideDstPort
-			}
-		}
-	}
 
-	err = service.Start(*serviceConfig)
-    if err != nil {
-        log.Fatal(err)
+			serviceConfigControl, err := buildServiceConfig(globalCfg, &tgt, probeCfg, true, sourcePortOracle) // do control measurement first
+			if err != nil {
+				log.Fatal("Error building control service config: %v\n", err)
+			}
+			serviceConfigTest, err := buildServiceConfig(globalCfg, &tgt, probeCfg, false, sourcePortOracle)
+			if err != nil {
+				log.Fatal("Error building test service config: %v\n", err)
+			}
+
+            err = service.Start(*serviceConfigControl)
+            if err != nil {
+                log.Fatalf("Error starting control measurement: %v\n", err)
+            }
+
+			err = service.Start(*serviceConfigTest)
+			if err != nil {
+				log.Fatalf("Error starting test measurement: %v\n", err)
+			}
+        }
     }
+
+    log.Println("All measurements done.")
 }
+

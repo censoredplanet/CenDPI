@@ -1,10 +1,5 @@
-# yaml-language-server: $schema=./cendpi-schema.json
-interface: en0
-pcapPath: test.pcap
-srcMac: f4:d4:88:74:62:40
-dstMac: 7c:10:c9:72:ef:c0
-bpf: tcp and src host 192.168.0.2
-
+# yaml-language-server: $schema=./../cendpi-schema.json
+protocol: both
 message:
   http:
     method: GET

@@ -1,0 +1,12 @@
+interface: en0
+pcapPath: "./test.pcap"
+sourceMAC: f4:d4:88:74:62:40
+targetMAC: 7c:10:c9:72:ef:c0
+sourceIP: 192.168.51.180
+probelist:
+#  - "probes/common/0_standard_request.yml"
+#  - "probes/common/1_corrupt_checksum.yml"
+#  - "probes/common/2_ip_fragmentation.yml"
+#  - "probes/common/3_ip_fragmentation_outorder.yml"
+  - "probes/https/0_https_ip_fragmentation_overlapping.yml"
+  - "probes/https/1_https_ip_fragmentation_overlapping_outorder.yml"
