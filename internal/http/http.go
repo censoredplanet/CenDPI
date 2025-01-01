@@ -1,35 +1,26 @@
 package http
 
 import (
-    "fmt"
+	"strings"
 )
 
 type HTTPConfig struct {
-    Version string
-    Method  string
-    Path    string
-    Domain  string
+	Request            string
+	Domain             string
+	AllCapsHostDomain  bool
+	AllLowerHostDomain bool
 }
 
-
 func BuildHTTPRequest(cfg *HTTPConfig) ([]byte, error) {
-    // Some defaults if fields are empty
-    if cfg.Version == "" {
-        cfg.Version = "HTTP/1.1"
-    }
-    if cfg.Method == "" {
-        cfg.Method = "GET"
-    }
-    if cfg.Path == "" {
-        cfg.Path = "/"
-    }
+	hostDomain := cfg.Domain
+	if cfg.AllCapsHostDomain {
+		hostDomain = strings.ToUpper(hostDomain)
+	} else if cfg.AllLowerHostDomain {
+		hostDomain = strings.ToLower(hostDomain)
+	}
+	// replace ${} with cfg.Domain
+	request := cfg.Request
+	request = strings.Replace(request, "${}", hostDomain, 1)
 
-    request := fmt.Sprintf(
-        "%s %s %s\r\nHost: %s\r\n\r\n",
-        cfg.Method,
-        cfg.Path,
-        cfg.Version,
-        cfg.Domain,
-    )
-    return []byte(request), nil
+	return []byte(request), nil
 }

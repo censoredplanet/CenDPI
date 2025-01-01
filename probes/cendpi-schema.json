@@ -14,17 +14,19 @@
             "type": "object",
             "description": "Options for constructing an HTTP request payload",
             "properties": {
-              "method": {
+              "request": {
                 "type": "string",
-                "description": "HTTP method (e.g., GET, POST)"
+                "description": "The entire HTTP request message, where the host domain should be replaced with ${}"
               },
-              "path": {
-                "type": "string",
-                "description": "The request path (e.g., /)"
+              "allCapsHostDomain": {
+                "type": "boolean",
+                "description": "Set true to make the Host header all caps",
+                "default": false
               },
-              "version": {
+              "allLowerHostDomain": {
                 "type": "string",
-                "description": "HTTP request version"
+                "description": "Set true to make the Host header all lower case",
+                "default": false
               }
             },
             "required": ["method", "path", "version"],

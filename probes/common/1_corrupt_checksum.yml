@@ -2,9 +2,7 @@
 protocol: both
 message:
   http:
-    method: GET
-    path: /
-    version: HTTP/1.1
+    request: "GET / HTTP/1.1\r\nHost: ${}\r\nUser-Agent: curl/8.11.1\r\nAccept: */*\r\n\r\n"
   tls:
     clientHelloConfig:
       chVersion: "0303"
