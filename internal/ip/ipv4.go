@@ -2,6 +2,7 @@ package ip
 
 import (
 	"net"
+
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 )
@@ -39,21 +40,21 @@ func NewWithPayload(config *IPConfig, payload []byte) *IPLayer {
 }
 
 func (i *IPLayer) Config() *IPConfig {
-    return i.config
+	return i.config
 }
 
 func (i *IPLayer) Build() (gopacket.SerializableLayer, error) {
 	// Construct the IPv4 layer
 	ipLayer := &layers.IPv4{
-		Version:    4,
-		IHL:        5, // 5 words (20 bytes) by default
-		TOS:        i.config.TOS,
-		Id:         i.config.Id,
-		TTL:        i.config.TTL,
-		SrcIP:      i.config.SrcIP,
-		DstIP:      i.config.DstIP,
-		Protocol: 	i.config.Protocol,
-		Options:  	i.config.Options,
+		Version:  4,
+		IHL:      5, // 5 words (20 bytes) by default
+		TOS:      i.config.TOS,
+		Id:       i.config.Id,
+		TTL:      i.config.TTL,
+		SrcIP:    i.config.SrcIP,
+		DstIP:    i.config.DstIP,
+		Protocol: i.config.Protocol,
+		Options:  i.config.Options,
 	}
 
 	// Handle fragmentation fields if needed

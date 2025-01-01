@@ -3,9 +3,9 @@ package assembler
 import (
 	"fmt"
 
+	"github.com/censoredplanet/CenDPI/internal/ip"
 	"github.com/gopacket/gopacket"
 	golayer "github.com/gopacket/gopacket/layers"
-	"github.com/censoredplanet/CenDPI/internal/ip"
 )
 
 type Layer interface {
@@ -27,13 +27,12 @@ func (a *Assembler) AddLayer(layer Layer) *Assembler {
 	return a
 }
 
-
 func (a *Assembler) Build(corruptTCPChecksum bool) ([]byte, error) {
 
 	var ipLayer *golayer.IPv4
-	var ipAndBelow  []gopacket.SerializableLayer
+	var ipAndBelow []gopacket.SerializableLayer
 	var tcpAndAbove []gopacket.SerializableLayer
-	var rawIPPayload  []byte
+	var rawIPPayload []byte
 
 	for _, layer := range a.layers {
 		l, err := layer.Build()

@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"net"
+
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 )
@@ -17,28 +18,28 @@ const (
 )
 
 type TCPConfig struct {
-	SrcPort layers.TCPPort
-	DstPort layers.TCPPort
-	Window  uint16
-	Urgent 	uint16
-	Seq     uint32
-	Ack     uint32
-	SYN     bool
-	ACK     bool
-	PSH     bool
-	FIN     bool
-	RST     bool
-	URG     bool
-	ECE     bool
+	SrcPort               layers.TCPPort
+	DstPort               layers.TCPPort
+	Window                uint16
+	Urgent                uint16
+	Seq                   uint32
+	Ack                   uint32
+	SYN                   bool
+	ACK                   bool
+	PSH                   bool
+	FIN                   bool
+	RST                   bool
+	URG                   bool
+	ECE                   bool
 	SeqRelativeToInitial  int
 	SeqRelativeToExpected int
 	AckRelativeToExpected int
-	MessageOffset int
-    MessageLength int
-	ReverseDomain bool
-	Data    []byte
-	Options  []layers.TCPOption
-	CorruptChecksum bool
+	MessageOffset         int
+	MessageLength         int
+	ReverseDomain         bool
+	Data                  []byte
+	Options               []layers.TCPOption
+	CorruptChecksum       bool
 }
 
 type TCPLayer struct {
@@ -79,7 +80,6 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 
 	return tcp, nil
 }
-
 
 // BuildAndSerialize constructs a TCP packet from the given TCPConfig and source/dest IPs,
 // computes checksums, and returns serialized bytes of the TCP segment.
@@ -136,46 +136,46 @@ func BuildAndSerialize(tcpConfig *TCPConfig, srcIP, dstIP net.IP) ([]byte, error
 // number of bytes. We then break the middle portion into 2-byte chunks and reverse the
 // order of those chunks.
 func RearrangeDomainIn16BitChunks(domain string) string {
-    dBytes := []byte(domain)
-    n := len(dBytes)
-    if n == 0 {
-        return domain
-    }
+	dBytes := []byte(domain)
+	n := len(dBytes)
+	if n == 0 {
+		return domain
+	}
 
-    suffix := []byte{}
-    end := n
-    if n%2 != 0 {
-        // keep the last byte as suffix
-        suffix = dBytes[n-1 : n]
-        end = n - 1
-    }
+	suffix := []byte{}
+	end := n
+	if n%2 != 0 {
+		// keep the last byte as suffix
+		suffix = dBytes[n-1 : n]
+		end = n - 1
+	}
 	middle := dBytes[0:end]
 	if len(middle) <= 0 {
 		return domain
 	}
-    reversed := reverseChunks2(middle)
-    return string(reversed) + string(suffix)
+	reversed := reverseChunks2(middle)
+	return string(reversed) + string(suffix)
 }
 
 func reverseChunks2(b []byte) []byte {
-    length := len(b)
-    if length%2 != 0 {
-        // should not happen if called properly
-        return b
-    }
-    chunkCount := length / 2
+	length := len(b)
+	if length%2 != 0 {
+		// should not happen if called properly
+		return b
+	}
+	chunkCount := length / 2
 
-    rev := make([]byte, length)
-    // i-th chunk from the front goes to i-th chunk from the back
-    for i := 0; i < chunkCount; i++ {
-        // chunk i => (b[2i], b[2i+1])
-        srcIdx := 2 * i
-        // chunk from the end => chunkCount-1 - i
-        dstChunk := chunkCount - 1 - i
-        dstIdx := 2 * dstChunk
+	rev := make([]byte, length)
+	// i-th chunk from the front goes to i-th chunk from the back
+	for i := 0; i < chunkCount; i++ {
+		// chunk i => (b[2i], b[2i+1])
+		srcIdx := 2 * i
+		// chunk from the end => chunkCount-1 - i
+		dstChunk := chunkCount - 1 - i
+		dstIdx := 2 * dstChunk
 
-        rev[dstIdx] = b[srcIdx]
-        rev[dstIdx+1] = b[srcIdx+1]
-    }
-    return rev
+		rev[dstIdx] = b[srcIdx]
+		rev[dstIdx+1] = b[srcIdx+1]
+	}
+	return rev
 }
