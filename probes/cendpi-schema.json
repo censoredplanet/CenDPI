@@ -24,12 +24,17 @@
                 "default": false
               },
               "allLowerHostDomain": {
-                "type": "string",
+                "type": "boolean",
                 "description": "Set true to make the Host header all lower case",
                 "default": false
+              },
+              "padding": {
+                "type": "boolean",
+                "default": false,
+                "description": "Set true to pad the request with a custom padding header"
               }
             },
-            "required": ["method", "path", "version"],
+            "required": ["request"],
             "additionalProperties": false
           },
           "tls": {
@@ -45,6 +50,11 @@
                     "pattern": "^[0-9A-Fa-f]{4}$",
                     "description": "4 hex digits for the ClientHello legacy_version (e.g. '0303')",
                     "default": "0303"
+                  },
+                  "pqKeyShare": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Set true to include pq key share in the ClientHello"
                   }
                 },
                 "additionalProperties": false

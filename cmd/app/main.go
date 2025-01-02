@@ -60,6 +60,7 @@ type HTTPMessageConf struct {
 	Request            string `yaml:"request"`
 	AllCapsHostDomain  bool   `yaml:"allCapsHostDomain"`
 	AllLowerHostDomain bool   `yaml:"allLowerHostDomain"`
+	Padding            bool   `yaml:"padding"`
 }
 
 type TLSMessageConf struct {
@@ -69,6 +70,7 @@ type TLSMessageConf struct {
 
 type ClientHelloYaml struct {
 	ChVersion string `yaml:"chVersion"`
+	PqKeyShare bool  `yaml:"pqKeyShare,omitempty"`
 }
 
 type TLSRecordYaml struct {
@@ -282,12 +284,14 @@ func buildServiceConfig(
 				Domain:             serviceConfig.Domain,
 				AllCapsHostDomain:  probeConfig.Message.HTTP.AllCapsHostDomain,
 				AllLowerHostDomain: probeConfig.Message.HTTP.AllLowerHostDomain,
+				Padding:            probeConfig.Message.HTTP.Padding,
 			}
 		}
 		if probeConfig.Message.TLS != nil {
 			ch := tls.ClientHelloConfig{
 				SNI:       serviceConfig.Domain,
 				ChVersion: probeConfig.Message.TLS.ClientHelloConfig.ChVersion,
+				PQKeyShare: probeConfig.Message.TLS.ClientHelloConfig.PqKeyShare,
 			}
 			var records []tls.TLSRecordConfig
 			for _, r := range probeConfig.Message.TLS.Records {
