@@ -4,50 +4,116 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ClientHelloConfig struct {
-	SNI       string // for the SNI extension
-	ChVersion string // 4 hex digits, e.g. "0303" or "0304"
-	PQKeyShare bool   // whether to include a key share for post-quantum
+	SNI        string // for the SNI extension
+	ChVersion  string `yaml:"chVersion"`  // 4 hex digits, e.g. "0303" or "0304"
+	PQKeyShare bool   `yaml:"pqKeyShare"` // whether to include a key share for post-quantum
 }
 
-type TLSRecordType string
-
 const (
-	PayloadClientHello    TLSRecordType = "clienthello"
-	PayloadHelloRequest   TLSRecordType = "hello_request"
-	PayloadEmptyHandshake TLSRecordType = "empty_handshake"
-	PayloadEmptyRecord    TLSRecordType = "empty_record"
-	PayloadAlertWarning   TLSRecordType = "alert_warning"
+	PayloadClientHello    string = "clienthello"
+	PayloadHelloRequest   string = "hello_request"
+	PayloadEmptyHandshake string = "empty_handshake"
+	PayloadEmptyRecord    string = "empty_record"
+	PayloadAlertWarning   string = "alert_warning"
 )
 
 type TLSRecordConfig struct {
-	ContentType    byte
-	RecordVersion  [2]byte
-	PayloadType    TLSRecordType
-	Offset         int
-	Length         int
-	AlertReasonHex string // if PayloadType=alert_warning, a 2-hex-digit reason (1 byte)
+	ContentType    byte    `yaml:"-"`
+	RecordVersion  [2]byte `yaml:"-"`
+	PayloadType    string  `yaml:"payloadType"`
+	Offset         int     `yaml:"offset"`
+	Length         int     `yaml:"length"`
+	AlertReasonHex string  `yaml:"alertReasonHex"` // if PayloadType=alert_warning, a 2-hex-digit reason (1 byte)
 }
 
 // TLSConfig is the top-level config.
 type TLSConfig struct {
-	ClientHelloConfig ClientHelloConfig
-	Records           []TLSRecordConfig // The list of records to produce
+	ClientHelloConfig ClientHelloConfig `yaml:"clientHelloConfig"`
+	Records           []TLSRecordConfig `yaml:"records"` // The list of records to produce
+}
+
+func (t *TLSRecordConfig) UnmarshalYAML(node *yaml.Node) error {
+	type base TLSRecordConfig
+	raw := struct {
+		base          `yaml:",inline"`
+		ContentType   string `yaml:"contentType"`
+		RecordVersion string `yaml:"recordVersion"`
+	}{}
+
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	switch strings.ToLower(strings.TrimSpace(raw.base.PayloadType)) {
+	case PayloadClientHello, PayloadHelloRequest, PayloadEmptyHandshake, PayloadEmptyRecord, PayloadAlertWarning:
+		t.PayloadType = raw.base.PayloadType
+	default:
+		return fmt.Errorf("invalid tls payloadType: %s, specified in probe yaml configration file", raw.base.PayloadType)
+	}
+
+	contentTypeByte, err := strconv.ParseUint(raw.ContentType, 16, 8)
+	if err != nil {
+		return fmt.Errorf("invalid content type specified in the yaml configuration: %s", raw.ContentType)
+	}
+
+	*t = TLSRecordConfig(raw.base)
+	t.ContentType = byte(contentTypeByte)
+	copy(t.RecordVersion[:], raw.RecordVersion)
+
+	return nil
 }
 
 const clientHelloRandomHex = "000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F"
 const sessionIDHex = "A0A1A2A3A4A5A6A7A8A9AAABACADAEAFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBF"
 const keyshareHex = "AFB0B1B2B3B4B5B6B7B8B9BABBBCBDBEBFA0A1A2A3A4A5A6A7A8A9AAABACADAE"
+
 // 1216 bytes of pq key
-const pqkeyshareHex = "8d99a4b0f28d35fc3d18a5a655f2948969acd4210ded118bd7e7797ee3bfd9170d80723237666ef70336804c361ea5a333c04d93b94a770b8e41374bd305cbd538b0076cb56c721c0fd4779c42bcb26828c0e095ae9272f4bcac76b69e83d11cf12321bca801e39710c8630f38918e7f499570724b5b76087b4197a98c1819e5bf24407ca4139a05e62bb6cb36b0b7c2ae1617260416af32b95f578209f3b1ccc66ca5699751470d3f47ad663024b88827dad946416365bf09461fb40f5526785f5949bb99843403393d962783fa26beb74fc80b6033e2adeab941df2b08c0e94b70a7ac95c682774302d569a2b09c0b76b0a74b0c5b7676828d192a73d47c771519398840d2eb20d3608ca7c4ab47006ed3710e0c8c32106a6b99d684a9a43ad91835977352fe39b09d7261f305826409d0660c315a54abb34b1330bc2923e0425977af6bcca805b74d81a241d0ac222dfaa0127576d6b6365ac59cecd045d241403ab95e987cc655d3c125d360233859a0a86e809843a9385f4bfb0015e2619fc73c6636cc684575ed610c281717c8e89d72788194788bd1603bbd5151d3706ce8951a1db2568f5ac9c1e92f7447460585ba46785488e8961fac47b6c3bbea640e58221a28d323d4558b70b72b24cc138147af82640b2af118abb8c46bba010f989baa729ca30c93630c07d88c7771321049f1b637245bd1b3bd3580a412fb0dc605cedff37d7e8bb7f5821d82ab3c142a58d2232326784aa1281b21e8058d6a46778ba4893452830c00a7715578fa668c554a0883b0350cce3d03a63d268af5454421f43780b7596c6131f7e7a3e9e0cb29288bf809632c9437097b107d37b7512b9660f755e39071f9f4a9d1ba162d7c473eb6a310ba8b6d773773bb0cb60841ff4c4964801370f9358c491836a4a4e45c4ccf6a12cf447328a1320f2b9e622bb6532a47129b0218c52271e139b8f7ce47a312e8a873e0900fe6d0c1078b380efb2c4c250200f389f6264f3fb073a17a730f9c6eb1c7978c9c7573e71ceb7198e15909a476c9718b8c0b2c3f23e151a3d659b4197a0adb206dc757f80b2fffe00bdd6b0ae4742fd0a468d7ca982de85b2dc12709f1915ce144658375c3119d21e8640063b862a461af6774a7115e70226922f8573ef47066350fdab336eb024a97d3c042d29135d92c009272ec21aa9d77c3ca15bca3ea30a249098cf790f167abab748f35518575288f6b167f388936408a2583b99d4dba675b1102ffa45099c29c056532060838843bb2f485aa671796a6a9b1864bab49140308d2106fd4335ef0cab7d36398f20ea3501913bc461acccd96f3ad6a797181b97f0f193c1e6101aa49497c4b3ad540babea8b67bc9bb55b931f7212587a5a3d1ac5c7fda00c7f898758b7ac2517d907b4f78755a3615aaf45089ebe92be8f2879177b47091820a1c2a0be7746b25976992b83f174764564c35b331c4e351473b3f42f665ca17a29ca985d3f45f6905633168426404ac990b7cf6cc746458733f6446f2e5c5846198972b10214889066c0884168a32521faeda37a82337538c175ea5193bb3b599d839554091bec736fb278e50d3a58903638c3c24d609a8aa0c852aeb6b7a1dd214ec0ae9e1cf0e72105f337e0e0d6be31ca14c3b58728d4473f6afa2efd1dfee546e4b05f0e3d21ef69ae8f4e9d1d258d4335b5b8f8f6616d1c78bf10d"
+const pqkeyshareHex = "8d99a4b0f28d35fc3d18a5a655f2948969acd4210ded118bd7e7797ee3bfd917" +
+	"0d80723237666ef70336804c361ea5a333c04d93b94a770b8e41374bd305cbd538b0076cb56c" +
+	"721c0fd4779c42bcb26828c0e095ae9272f4bcac76b69e83d11cf12321bca801e39710c8630f" +
+	"38918e7f499570724b5b76087b4197a98c1819e5bf24407ca4139a05e62bb6cb36b0b7c2ae16" +
+	"17260416af32b95f578209f3b1ccc66ca5699751470d3f47ad663024b88827dad946416365bf" +
+	"09461fb40f5526785f5949bb99843403393d962783fa26beb74fc80b6033e2adeab941df2b08" +
+	"c0e94b70a7ac95c682774302d569a2b09c0b76b0a74b0c5b7676828d192a73d47c771519398" +
+	"840d2eb20d3608ca7c4ab47006ed3710e0c8c32106a6b99d684a9a43ad91835977352fe39b0" +
+	"9d7261f305826409d0660c315a54abb34b1330bc2923e0425977af6bcca805b74d81a241d0ac" +
+	"222dfaa0127576d6b6365ac59cecd045d241403ab95e987cc655d3c125d360233859a0a86e80" +
+	"9843a9385f4bfb0015e2619fc73c6636cc684575ed610c281717c8e89d72788194788bd1603b" +
+	"bd5151d3706ce8951a1db2568f5ac9c1e92f7447460585ba46785488e8961fac47b6c3bbea64" +
+	"0e58221a28d323d4558b70b72b24cc138147af82640b2af118abb8c46bba010f989baa729ca3" +
+	"0c93630c07d88c7771321049f1b637245bd1b3bd3580a412fb0dc605cedff37d7e8bb7f5821d" +
+	"82ab3c142a58d2232326784aa1281b21e8058d6a46778ba4893452830c00a7715578fa668c55" +
+	"4a0883b0350cce3d03a63d268af5454421f43780b7596c6131f7e7a3e9e0cb29288bf809632c" +
+	"9437097b107d37b7512b9660f755e39071f9f4a9d1ba162d7c473eb6a310ba8b6d773773bb0c" +
+	"b60841ff4c4964801370f9358c491836a4a4e45c4ccf6a12cf447328a1320f2b9e622bb6532a" +
+	"47129b0218c52271e139b8f7ce47a312e8a873e0900fe6d0c1078b380efb2c4c250200f389f6" +
+	"264f3fb073a17a730f9c6eb1c7978c9c7573e71ceb7198e15909a476c9718b8c0b2c3f23e151" +
+	"a3d659b4197a0adb206dc757f80b2fffe00bdd6b0ae4742fd0a468d7ca982de85b2dc12709f1" +
+	"915ce144658375c3119d21e8640063b862a461af6774a7115e70226922f8573ef47066350fda" +
+	"b336eb024a97d3c042d29135d92c009272ec21aa9d77c3ca15bca3ea30a249098cf790f167ab" +
+	"ab748f35518575288f6b167f388936408a2583b99d4dba675b1102ffa45099c29c0565320608" +
+	"38843bb2f485aa671796a6a9b1864bab49140308d2106fd4335ef0cab7d36398f20ea3501913" +
+	"bc461acccd96f3ad6a797181b97f0f193c1e6101aa49497c4b3ad540babea8b67bc9bb55b931" +
+	"f7212587a5a3d1ac5c7fda00c7f898758b7ac2517d907b4f78755a3615aaf45089ebe92be8f2" +
+	"879177b47091820a1c2a0be7746b25976992b83f174764564c35b331c4e351473b3f42f665ca" +
+	"17a29ca985d3f45f6905633168426404ac990b7cf6cc746458733f6446f2e5c5846198972b10" +
+	"214889066c0884168a32521faeda37a82337538c175ea5193bb3b599d839554091bec736fb27" +
+	"8e50d3a58903638c3c24d609a8aa0c852aeb6b7a1dd214ec0ae9e1cf0e72105f337e0e0d6be3" +
+	"1ca14c3b58728d4473f6afa2efd1dfee546e4b05f0e3d21ef69ae8f4e9d1d258d4335b5b8f8f" +
+	"6616d1c78bf10d"
 
 func BuildTLS(cfg *TLSConfig) ([]byte, error) {
 	// Build the clienthello upfront, so we can slice from it if needed.
 	clientHelloPayload, err := buildClientHello(cfg.ClientHelloConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error building clientHello: %v", err)
+		return nil, fmt.Errorf("error building clientHello: %s", err.Error())
 	}
 
 	var finalBytes []byte
@@ -57,12 +123,12 @@ func BuildTLS(cfg *TLSConfig) ([]byte, error) {
 		// get the raw payload for this record
 		payload, err := getRecordPayload(rec, clientHelloPayload)
 		if err != nil {
-			return nil, fmt.Errorf("record %d: %w", i, err)
+			return nil, fmt.Errorf("record %d: %s", i, err.Error())
 		}
 		// wrap in a TLS record
 		recordBytes, err := buildTLSRecord(rec.ContentType, rec.RecordVersion, payload)
 		if err != nil {
-			return nil, fmt.Errorf("record %d: BuildTLSRecord error: %v", i, err)
+			return nil, fmt.Errorf("record %d: BuildTLSRecord error: %s", i, err.Error())
 		}
 		finalBytes = append(finalBytes, recordBytes...)
 	}
@@ -77,7 +143,7 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
 	}
 	verBytes, err := hex.DecodeString(version)
 	if err != nil {
-		return nil, fmt.Errorf("invalid hex version string '%s': %v", version, err)
+		return nil, fmt.Errorf("invalid hex version string '%s': %s", version, err.Error())
 	}
 	if len(verBytes) != 2 {
 		return nil, fmt.Errorf("expected 2 bytes after decoding version, got %d bytes", len(verBytes))
@@ -86,7 +152,7 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
 
 	randomBytes, err := hex.DecodeString(clientHelloRandomHex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode clientHelloRandomHex: %v", err)
+		return nil, fmt.Errorf("failed to decode clientHelloRandomHex: %s", err.Error())
 	}
 	if len(randomBytes) != 32 {
 		return nil, fmt.Errorf("clientHelloRandomHex must represent exactly 32 bytes")
@@ -94,7 +160,7 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
 
 	sessionID, err := hex.DecodeString(sessionIDHex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode sessionIDHex: %v", err)
+		return nil, fmt.Errorf("failed to decode sessionIDHex: %s", err.Error())
 	}
 	if len(sessionID) != 32 {
 		return nil, fmt.Errorf("sessionIDHex must represent exactly 32 bytes")
@@ -233,60 +299,60 @@ func buildSupportedVersionsExtension() []byte {
 }
 
 func buildKeyShareEntry(group uint16, key []byte) ([]byte, error) {
-    groupLen := len(key)
-    entryLen := 2 + 2 + groupLen // group(2) + key_exchange_length(2) + key_exchange_data
-    entry := make([]byte, entryLen)
+	groupLen := len(key)
+	entryLen := 2 + 2 + groupLen // group(2) + key_exchange_length(2) + key_exchange_data
+	entry := make([]byte, entryLen)
 
-    // group
-    binary.BigEndian.PutUint16(entry[0:2], group)
-    // key_exchange_length
-    binary.BigEndian.PutUint16(entry[2:4], uint16(groupLen))
-    // key_exchange_data
-    copy(entry[4:], key)
+	// group
+	binary.BigEndian.PutUint16(entry[0:2], group)
+	// key_exchange_length
+	binary.BigEndian.PutUint16(entry[2:4], uint16(groupLen))
+	// key_exchange_data
+	copy(entry[4:], key)
 
-    return entry, nil
+	return entry, nil
 }
 
 func buildKeyShareExtension(PQKeyShare bool) ([]byte, error) {
 	const x25519Group = uint16(0x001d)
-    const x25519Len = 32
-    x25519Key, err := hex.DecodeString(keyshareHex)
-    if err != nil {
-        return nil, fmt.Errorf("failed to decode key for X25519 key_share: %v", err)
-    }
-    if len(x25519Key) != x25519Len {
-        return nil, fmt.Errorf("keyShareHex must be exactly %d bytes for X25519", x25519Len)
-    }
+	const x25519Len = 32
+	x25519Key, err := hex.DecodeString(keyshareHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode key for X25519 key_share: %w", err)
+	}
+	if len(x25519Key) != x25519Len {
+		return nil, fmt.Errorf("keyShareHex must be exactly %d bytes for X25519", x25519Len)
+	}
 
-    x25519Entry, err := buildKeyShareEntry(x25519Group, x25519Key)
-    if err != nil {
-        return nil, fmt.Errorf("failed building X25519 KeyShareEntry: %w", err)
-    }
+	x25519Entry, err := buildKeyShareEntry(x25519Group, x25519Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed building X25519 KeyShareEntry: %w", err)
+	}
 
 	var pqEntry []byte
-    if PQKeyShare {
-        const pqGroup = uint16(0x11ec)
-        pqKey, err := hex.DecodeString(pqkeyshareHex)
-        if err != nil {
-            return nil, fmt.Errorf("failed to decode pqkeyshareHex: %v", err)
-        }
-        pqEntry, err = buildKeyShareEntry(pqGroup, pqKey)
-        if err != nil {
-            return nil, fmt.Errorf("failed building PQ KeyShareEntry: %w", err)
-        }
-    }
+	if PQKeyShare {
+		const pqGroup = uint16(0x11ec)
+		pqKey, err := hex.DecodeString(pqkeyshareHex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode pqkeyshareHex: %w", err)
+		}
+		pqEntry, err = buildKeyShareEntry(pqGroup, pqKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed building PQ KeyShareEntry: %w", err)
+		}
+	}
 
 	combinedEntries := append(x25519Entry, pqEntry...)
 
-    ksListLen := make([]byte, 2)
-    binary.BigEndian.PutUint16(ksListLen, uint16(len(combinedEntries)))
-    data := append(ksListLen, combinedEntries...)
+	ksListLen := make([]byte, 2)
+	binary.BigEndian.PutUint16(ksListLen, uint16(len(combinedEntries)))
+	data := append(ksListLen, combinedEntries...)
 
-    ext := make([]byte, 4+len(data))
-    ext[0] = 0x00
-    ext[1] = 0x33
-    binary.BigEndian.PutUint16(ext[2:4], uint16(len(data)))
-    copy(ext[4:], data)
+	ext := make([]byte, 4+len(data))
+	ext[0] = 0x00
+	ext[1] = 0x33
+	binary.BigEndian.PutUint16(ext[2:4], uint16(len(data)))
+	copy(ext[4:], data)
 
 	return ext, nil
 }
@@ -338,8 +404,8 @@ func buildSupportedGroupsExtension(PQKeyShare bool) []byte {
 	}
 
 	if PQKeyShare {
-        groups = append(groups, 0x11ec)
-    }
+		groups = append(groups, 0x11ec)
+	}
 
 	groupBytes := make([]byte, 2*len(groups))
 	for i, grp := range groups {
@@ -420,7 +486,7 @@ func buildAlertWarning(reason string) ([]byte, error) {
 	}
 	reasonBytes, err := hex.DecodeString(reason)
 	if err != nil {
-		return nil, fmt.Errorf("invalid hex reason string '%s': %v", reason, err)
+		return nil, fmt.Errorf("invalid hex reason string '%s': %w", reason, err)
 	}
 	return []byte{0x01, reasonBytes[0]}, nil
 }
@@ -474,7 +540,7 @@ func getRecordPayload(rec TLSRecordConfig, clientHello []byte) ([]byte, error) {
 		}
 		alert, err := buildAlertWarning(reasonHex)
 		if err != nil {
-			return nil, fmt.Errorf("failed building alert: %v", err)
+			return nil, fmt.Errorf("failed building alert: %w", err)
 		}
 		return alert, nil
 

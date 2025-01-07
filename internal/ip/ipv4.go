@@ -2,9 +2,11 @@ package ip
 
 import (
 	"net"
+	"strings"
 
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
+	"gopkg.in/yaml.v3"
 )
 
 type IPConfig struct {
@@ -12,22 +14,49 @@ type IPConfig struct {
 	DstIP          net.IP
 	Version        uint8
 	IHL            uint8
-	TOS            uint8
-	Id             uint16
-	Protocol       layers.IPProtocol
-	TTL            uint8
-	Options        []layers.IPv4Option
+	TOS            uint8               `yaml:"tos"`
+	Id             uint16              `yaml:"id"`
+	Protocol       layers.IPProtocol   `yaml:"-"`
+	TTL            uint8               `yaml:"ttl"`
+	Options        []layers.IPv4Option `yaml:"-"`
 	Padding        []byte
-	FragmentOffset int
-	MessageOffset  int
-	MessageLength  int
-	ReverseDomain  bool
-	MoreFragments  bool
+	FragmentOffset int  `yaml:"fragmentOffset"`
+	MessageOffset  int  `yaml:"messageOffset"`
+	MessageLength  int  `yaml:"messageLength"`
+	ReverseDomain  bool `yaml:"reverseDomain"`
+	MoreFragments  bool `yaml:"moreFragments"`
 	RawPayload     []byte
 }
 
 type IPLayer struct {
 	config *IPConfig
+}
+
+func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
+	type base IPConfig
+	raw := struct {
+		base  `yaml:",inline"`
+		proto string `yaml:"protocol"`
+	}{}
+
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	*i = IPConfig(raw.base)
+
+	switch strings.ToLower(strings.TrimSpace(raw.proto)) {
+	case "tcp":
+		i.Protocol = layers.IPProtocolTCP
+	// add additional protocol support here
+	default:
+		// default to tcp
+		i.Protocol = layers.IPProtocolTCP
+	}
+
+	// add support for ip option types here
+
+	return nil
 }
 
 func New(config *IPConfig) *IPLayer {
