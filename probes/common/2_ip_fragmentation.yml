@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../cendpi-schema.json
+# yaml-language-server: $schema=./cendpi-schema.json
 protocol: both
 message:
   http:
@@ -14,11 +14,16 @@ message:
         length: -1
 
 packets:
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33345
     tcp:
+      srcPort: 12345
+      dstPort: 80
       window: 65535
       flags:
         syn: true
@@ -33,16 +38,24 @@ packets:
           tcpOptionData: "06"
     delay: 1
       
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33346
     tcp:
+      srcPort: 12345
+      dstPort: 80
       window: 2056
       flags:
         ack: true
 
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33347
@@ -52,7 +65,10 @@ packets:
       messageLength: 24
     delay: 1
 
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33347
@@ -62,7 +78,10 @@ packets:
       messageLength: 24
     delay: 1
 
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33347
@@ -72,22 +91,32 @@ packets:
       messageLength: -1
     delay: 1
 
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33349
     tcp:
+      srcPort: 12345
+      dstPort: 80
       window: 2056
       flags:
         ack: true
         fin: true
     delay: 1
 
-  - ip:
+  - ethernet:
+    ip:
+      srcIp: 192.168.0.1
+      dstIp: 192.168.0.2
       tos: 0
       ttl: 64
       id: 33350
     tcp:
+      srcPort: 12345
+      dstPort: 80
       window: 2056
       flags:
         ack: true

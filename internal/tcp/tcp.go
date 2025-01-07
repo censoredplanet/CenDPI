@@ -5,7 +5,6 @@ import (
 
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
-	"gopkg.in/yaml.v3"
 )
 
 type TCPPacketType int
@@ -21,64 +20,30 @@ const (
 type TCPConfig struct {
 	SrcPort               layers.TCPPort
 	DstPort               layers.TCPPort
-	Window                uint16 `yaml:"window"`
-	Urgent                uint16 `yaml:"urgentPointer"`
+	Window                uint16
+	Urgent                uint16
 	Seq                   uint32
 	Ack                   uint32
-	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial"`
-	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected"`
-	AckRelativeToExpected int                `yaml:"ackRelativeToExpected"`
-	MessageOffset         int                `yaml:"messageOffset"`
-	MessageLength         int                `yaml:"messageLength"`
-	ReverseDomain         bool               `yaml:"reverseDomain"`
-	Data                  []byte             `yaml:"-"`
-	Options               []layers.TCPOption `yaml:"-"`
-	CorruptChecksum       bool               `yaml:"corruptChecksum"`
-	Flags                 TCPFlags           `yaml:"flags"`
-}
-type TCPFlags struct {
-	SYN bool `yaml:"syn"`
-	ACK bool `yaml:"ack"`
-	PSH bool `yaml:"psh"`
-	FIN bool `yaml:"fin"`
-	RST bool `yaml:"rst"`
-	URG bool `yaml:"urg"`
-	ECE bool `yaml:"ece"`
-}
-
-type TCPOptions struct {
-	TCPOptionType   uint8  `yaml:"tcpOptionType"`
-	TCPOptionLength uint8  `yaml:"tcpOptionLength"`
-	TCPOptionData   string `yaml:"tcpOptionData"`
+	SYN                   bool
+	ACK                   bool
+	PSH                   bool
+	FIN                   bool
+	RST                   bool
+	URG                   bool
+	ECE                   bool
+	SeqRelativeToInitial  int
+	SeqRelativeToExpected int
+	AckRelativeToExpected int
+	MessageOffset         int
+	MessageLength         int
+	ReverseDomain         bool
+	Data                  []byte
+	Options               []layers.TCPOption
+	CorruptChecksum       bool
 }
 
 type TCPLayer struct {
 	config *TCPConfig
-}
-
-func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
-	type base TCPConfig
-	raw := struct {
-		base    `yaml:",inline"`
-		Data    string       `yaml:"data"`
-		Options []TCPOptions `yaml:"tcpOptions"`
-	}{}
-
-	if err := node.Decode(&raw); err != nil {
-		return err
-	}
-
-	*t = TCPConfig(raw.base)
-	t.Data = []byte(raw.Data)
-	var tcpOpts layers.TCPOption
-	for _, opt := range raw.Options {
-		tcpOpts.OptionData = []byte(opt.TCPOptionData)
-		tcpOpts.OptionLength = opt.TCPOptionLength
-		tcpOpts.OptionType = layers.TCPOptionKind(opt.TCPOptionType)
-		t.Options = append(t.Options, tcpOpts)
-	}
-
-	return nil
 }
 
 func New(config *TCPConfig) *TCPLayer {
@@ -93,13 +58,13 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 		DstPort: t.config.DstPort,
 		Window:  t.config.Window,
 		Urgent:  t.config.Urgent,
-		SYN:     t.config.Flags.SYN,
-		ACK:     t.config.Flags.ACK,
-		PSH:     t.config.Flags.PSH,
-		FIN:     t.config.Flags.FIN,
-		RST:     t.config.Flags.RST,
-		URG:     t.config.Flags.URG,
-		ECE:     t.config.Flags.ECE,
+		SYN:     t.config.SYN,
+		ACK:     t.config.ACK,
+		PSH:     t.config.PSH,
+		FIN:     t.config.FIN,
+		RST:     t.config.RST,
+		URG:     t.config.URG,
+		ECE:     t.config.ECE,
 		Seq:     t.config.Seq,
 		Ack:     t.config.Ack,
 	}
@@ -132,13 +97,13 @@ func BuildAndSerialize(tcpConfig *TCPConfig, srcIP, dstIP net.IP) ([]byte, error
 		DstPort: tcpConfig.DstPort,
 		Seq:     tcpConfig.Seq,
 		Ack:     tcpConfig.Ack,
-		SYN:     tcpConfig.Flags.SYN,
-		ACK:     tcpConfig.Flags.ACK,
-		PSH:     tcpConfig.Flags.PSH,
-		FIN:     tcpConfig.Flags.FIN,
-		RST:     tcpConfig.Flags.RST,
-		URG:     tcpConfig.Flags.URG,
-		ECE:     tcpConfig.Flags.ECE,
+		SYN:     tcpConfig.SYN,
+		ACK:     tcpConfig.ACK,
+		PSH:     tcpConfig.PSH,
+		FIN:     tcpConfig.FIN,
+		RST:     tcpConfig.RST,
+		URG:     tcpConfig.URG,
+		ECE:     tcpConfig.ECE,
 		Window:  tcpConfig.Window,
 		Urgent:  tcpConfig.Urgent,
 	}

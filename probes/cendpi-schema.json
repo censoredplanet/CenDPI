@@ -119,6 +119,21 @@
         "items": {
           "type": "object",
           "properties": {
+            "ethernet": {
+              "type": "object",
+              "properties": {
+                "srcMac": {
+                  "type": "string",
+                  "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+                },
+                "dstMac": {
+                  "type": "string",
+                  "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+                }
+              },
+              "required": ["srcMac", "dstMac"],
+              "additionalProperties": false
+            },
             "ip": {
               "type": "object",
               "properties": {
@@ -126,10 +141,11 @@
                 "ttl": {"type":"integer","minimum":0,"maximum":255,"default":64},
                 "id": {"type":"integer","minimum":0,"maximum":65535,"default":0},
                 "protocol": {
-                  "type": "string",
-                  "description": "Specifies which transport protocol to use",
-                  "enum": ["tcp"],
-                  "default": "tcp"
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "default": 6,
+                  "description": "IP protocol number. Defaults to 6 (TCP) if not specified."
                 },
                 "fragmentOffset": {
                   "type":"integer",
@@ -150,8 +166,8 @@
                 },
                 "messageLength": {
                   "type": "integer",
-                  "minimum": -1,
-                  "description": "Length of the fragment to extract in bytes. Valid values: -1 (entire remainder), 0 (no fragment), or positive integers."
+                  "minimum": 1,
+                  "description": "Length of the fragment to extract. In bytes."
                 },
                 "reverseDomain": {
                   "type": "boolean",
@@ -241,7 +257,7 @@
                 },
                 "messageLength": {
                   "type": "integer",
-                  "minimum": -1,
+                  "minimum": 1,
                   "description": "Length of the fragment to extract. In bytes."
                 },
                 "reverseDomain": {
@@ -263,7 +279,7 @@
               "default": 0
             }
           },
-          "required": ["ip"],
+          "required": ["ethernet", "ip"],
           "additionalProperties": false
         }
       }
