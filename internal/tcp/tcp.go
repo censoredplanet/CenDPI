@@ -77,7 +77,7 @@ func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 		if opt.TCPOptionData != "" {
 			optData, err := hex.DecodeString(opt.TCPOptionData)
 			if err != nil {
-				return fmt.Errorf("invalid hex in IP Option data: '%s'", opt.TCPOptionData)
+				return fmt.Errorf("invalid hex in TCP Option data: '%s'", opt.TCPOptionData)
 			}
 			tcpOpts.OptionData = []byte(optData)
 		}

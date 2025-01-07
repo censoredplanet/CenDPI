@@ -163,11 +163,8 @@ func main() {
 				log.Printf("Skipping probe %s: %v\n", probeFile, err)
 				continue
 			}
-
 			probeCfg.Domain = tgt.TestDomain
-			if probeCfg.Message != nil && probeCfg.Message.HTTP != nil {
-				probeCfg.Message.HTTP.Domain = tgt.TestDomain
-			}
+			
 
 			controlProbeCfg, err := parseProbeConfigYAML(probeFile, globalCfg)
 			if err != nil {
@@ -177,9 +174,12 @@ func main() {
 
 			controlProbeCfg.Domain = tgt.ControlDomain
 			controlProbeCfg.IsControl = true
-			if controlProbeCfg.Message != nil && probeCfg.Message.HTTP != nil {
-				controlProbeCfg.Message.HTTP.Domain = tgt.ControlDomain
+
+			if probeCfg.Protocol != "both" && probeCfg.Protocol != tgt.Protocol {
+				continue
 			}
+			probeCfg.Protocol = tgt.Protocol
+			controlProbeCfg.Protocol = tgt.Protocol
 
 			probeCfg.SrcPort = layers.TCPPort(sourcePortOracle.NextPort())
 			controlProbeCfg.SrcPort = layers.TCPPort(sourcePortOracle.NextPort())

@@ -3,7 +3,8 @@ package ip
 import (
 	"net"
 	"strings"
-
+	"encoding/hex"
+	"fmt"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"gopkg.in/yaml.v3"
@@ -32,11 +33,18 @@ type IPLayer struct {
 	config *IPConfig
 }
 
+type IPOptions struct {
+	IPOptionType   uint8  `yaml:"ipOptionType"`
+	IPOptionLength uint8  `yaml:"ipOptionLength"`
+	IPOptionData   string `yaml:"ipOptionData,omitempty"`
+}
+
 func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 	type base IPConfig
 	raw := struct {
 		base  `yaml:",inline"`
-		proto string `yaml:"protocol"`
+		Proto string `yaml:"protocol"`
+		Options []IPOptions `yaml:"ipOptions"`
 	}{}
 
 	if err := node.Decode(&raw); err != nil {
@@ -45,16 +53,31 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 
 	*i = IPConfig(raw.base)
 
-	switch strings.ToLower(strings.TrimSpace(raw.proto)) {
+	switch strings.ToLower(strings.TrimSpace(raw.Proto)) {
 	case "tcp":
 		i.Protocol = layers.IPProtocolTCP
-	// add additional protocol support here
+	case "udp":
+		i.Protocol = layers.IPProtocolUDP
 	default:
 		// default to tcp
 		i.Protocol = layers.IPProtocolTCP
 	}
 
-	// add support for ip option types here
+	for _, opt := range raw.Options {
+		var optData []byte
+		if opt.IPOptionData != "" {
+			var err error
+			optData, err = hex.DecodeString(opt.IPOptionData)
+			if err != nil {
+				return fmt.Errorf("invalid hex in IP Option data: '%s'", opt.IPOptionData)
+			}
+		}
+		i.Options = append(i.Options, layers.IPv4Option{
+			OptionType:   opt.IPOptionType,
+			OptionLength: opt.IPOptionLength,
+			OptionData:   optData,
+		})
+	}
 
 	return nil
 }
