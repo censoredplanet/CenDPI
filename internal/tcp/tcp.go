@@ -1,6 +1,8 @@
 package tcp
 
 import (
+	"encoding/hex"
+	"fmt"
 	"net"
 
 	"github.com/gopacket/gopacket"
@@ -72,7 +74,14 @@ func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 	t.Data = []byte(raw.Data)
 	var tcpOpts layers.TCPOption
 	for _, opt := range raw.Options {
-		tcpOpts.OptionData = []byte(opt.TCPOptionData)
+		if opt.TCPOptionData != "" {
+			optData, err := hex.DecodeString(opt.TCPOptionData)
+			if err != nil {
+				return fmt.Errorf("invalid hex in IP Option data: '%s'", opt.TCPOptionData)
+			}
+			tcpOpts.OptionData = []byte(optData)
+		}
+
 		tcpOpts.OptionLength = opt.TCPOptionLength
 		tcpOpts.OptionType = layers.TCPOptionKind(opt.TCPOptionType)
 		t.Options = append(t.Options, tcpOpts)

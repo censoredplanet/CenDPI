@@ -48,9 +48,9 @@ type ServiceMessage struct {
 
 type ServicePacket struct {
 	Ethernet ethernet.EthernetConfig
-	IP       ip.IPConfig   `yaml:"ip"`
-	TCP      tcp.TCPConfig `yaml:"tcp"`
-	Delay    int           `yaml:"delay"` // Per-packet delay in seconds
+	IP       ip.IPConfig    `yaml:"ip"`
+	TCP      *tcp.TCPConfig `yaml:"tcp"`
+	Delay    int            `yaml:"delay"` // Per-packet delay in seconds
 }
 
 type FlowKey struct {
@@ -272,9 +272,14 @@ func Start(config ServiceConfig) (err error) {
 			}
 		}
 		p.IP.SrcIP, p.IP.DstIP = config.SrcIP, config.DstIP
-		p.TCP.SrcPort, p.TCP.DstPort = config.SrcPort, config.DstPort
-
-		hasTCP := (p.TCP.SrcPort != 0 || p.TCP.DstPort != 0)
+		hasTCP := false
+		if p.TCP != nil {
+			hasTCP = true
+			p.TCP.SrcPort, p.TCP.DstPort = config.SrcPort, config.DstPort
+		}
+		if config.Message.TLS != nil {
+			config.Message.TLS.ClientHelloConfig.SNI = config.Domain
+		}
 
 		// --------------------------------------------------
 		// Case 1: We have a TCP layer in the config
@@ -342,7 +347,7 @@ func Start(config ServiceConfig) (err error) {
 			packet, err := assembler.New().
 				AddLayer(ethernet.New(&p.Ethernet)).
 				AddLayer(ip.New(&p.IP)).
-				AddLayer(tcp.New(&p.TCP)).
+				AddLayer(tcp.New(p.TCP)).
 				Build(p.TCP.CorruptChecksum)
 			if err != nil {
 				return fmt.Errorf("packet %d: Assembler Build error: %w", n, err)

@@ -62,10 +62,14 @@ func (t *TLSRecordConfig) UnmarshalYAML(node *yaml.Node) error {
 	if err != nil {
 		return fmt.Errorf("invalid content type specified in the yaml configuration: %s", raw.ContentType)
 	}
+	recordVersion, err := hex.DecodeString(raw.RecordVersion)
+	if err != nil || len(recordVersion) != 2 {
+		return fmt.Errorf("invalid recordVersion '%s'", raw.RecordVersion)
+	}
 
 	*t = TLSRecordConfig(raw.base)
 	t.ContentType = byte(contentTypeByte)
-	copy(t.RecordVersion[:], raw.RecordVersion)
+	copy(t.RecordVersion[:], recordVersion)
 
 	return nil
 }
