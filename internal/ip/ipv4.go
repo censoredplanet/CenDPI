@@ -26,6 +26,8 @@ type IPConfig struct {
 	MessageLength  int  `yaml:"messageLength"`
 	ReverseDomain  bool `yaml:"reverseDomain"`
 	MoreFragments  bool `yaml:"moreFragments"`
+	DontFragment   bool `yaml:"dontFragment"`
+	EvilBit        bool `yaml:"evilBit"`
 	RawPayload     []byte
 }
 
@@ -109,10 +111,18 @@ func (i *IPLayer) Build() (gopacket.SerializableLayer, error) {
 		Options:  i.config.Options,
 	}
 
-	// Handle fragmentation fields if needed
 	if i.config.MoreFragments {
-		ipLayer.Flags = layers.IPv4MoreFragments
+		ipLayer.Flags |= layers.IPv4MoreFragments
 	}
+
+	if i.config.DontFragment {
+		ipLayer.Flags |= layers.IPv4DontFragment
+	}
+
+	if i.config.EvilBit {
+		ipLayer.Flags |= layers.IPv4EvilBit
+	}
+
 	// fragmentOffset is assumed to already be in 8-byte units
 	if i.config.FragmentOffset > 0 {
 		ipLayer.FragOffset = uint16(i.config.FragmentOffset)

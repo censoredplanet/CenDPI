@@ -50,7 +50,7 @@ type ServicePacket struct {
 	Ethernet ethernet.EthernetConfig
 	IP       ip.IPConfig    `yaml:"ip"`
 	TCP      *tcp.TCPConfig `yaml:"tcp"`
-	Delay    int            `yaml:"delay"` // Per-packet delay in seconds
+	Delay    float64        `yaml:"delay"` // Per-packet delay in seconds
 }
 
 type FlowKey struct {
@@ -353,7 +353,7 @@ func Start(config ServiceConfig) (err error) {
 				return fmt.Errorf("packet %d: Assembler Build error: %w", n, err)
 			}
 
-			if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, flowKey); err != nil {
+			if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay* float64(time.Second)), flowKey); err != nil {
 				return fmt.Errorf("packet %d: sendAndCollect error: %w", n, err)
 			}
 
@@ -437,7 +437,7 @@ func Start(config ServiceConfig) (err error) {
 					return fmt.Errorf("packet %d: Assembler Build error: %w", n, err)
 				}
 
-				if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay)*time.Second, flowKey); err != nil {
+				if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay* float64(time.Second)), flowKey); err != nil {
 					return fmt.Errorf("packet %d: sendAndCollect error: %w", n, err)
 				}
 
