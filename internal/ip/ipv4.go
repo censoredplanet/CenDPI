@@ -1,34 +1,36 @@
 package ip
 
 import (
-	"net"
-	"strings"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"strings"
+
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"gopkg.in/yaml.v3"
 )
 
 type IPConfig struct {
-	SrcIP          net.IP
-	DstIP          net.IP
-	Version        uint8
-	IHL            uint8
-	TOS            uint8               `yaml:"tos"`
-	Id             uint16              `yaml:"id"`
-	Protocol       layers.IPProtocol   `yaml:"-"`
-	TTL            uint8               `yaml:"ttl"`
-	Options        []layers.IPv4Option `yaml:"-"`
-	Padding        []byte
-	FragmentOffset int  `yaml:"fragmentOffset"`
-	MessageOffset  int  `yaml:"messageOffset"`
-	MessageLength  int  `yaml:"messageLength"`
-	ReverseDomain  bool `yaml:"reverseDomain"`
-	MoreFragments  bool `yaml:"moreFragments"`
-	DontFragment   bool `yaml:"dontFragment"`
-	EvilBit        bool `yaml:"evilBit"`
-	RawPayload     []byte
+	SrcIP                net.IP
+	DstIP                net.IP
+	Version              uint8
+	IHL                  uint8
+	TOS                  uint8               `yaml:"tos"`
+	Id                   uint16              `yaml:"id"`
+	Protocol             layers.IPProtocol   `yaml:"-"`
+	TTL                  uint8               `yaml:"ttl"`
+	Options              []layers.IPv4Option `yaml:"-"`
+	Padding              []byte
+	FragmentOffset       int  `yaml:"fragmentOffset"`
+	MessageOffset        int  `yaml:"messageOffset"`
+	MessageLength        int  `yaml:"messageLength"`
+	ReverseDomain        bool `yaml:"reverseDomain"`
+	MoreFragments        bool `yaml:"moreFragments"`
+	DontFragment         bool `yaml:"dontFragment"`
+	EvilBit              bool `yaml:"evilBit"`
+	RawPayload           []byte
+	FragmentationEnabled bool
 }
 
 type IPLayer struct {
@@ -44,8 +46,8 @@ type IPOptions struct {
 func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 	type base IPConfig
 	raw := struct {
-		base  `yaml:",inline"`
-		Proto string `yaml:"protocol"`
+		base    `yaml:",inline"`
+		proto   string      `yaml:"protocol"`
 		Options []IPOptions `yaml:"ipOptions"`
 	}{}
 
@@ -55,7 +57,7 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 
 	*i = IPConfig(raw.base)
 
-	switch strings.ToLower(strings.TrimSpace(raw.Proto)) {
+	switch strings.ToLower(strings.TrimSpace(raw.proto)) {
 	case "tcp":
 		i.Protocol = layers.IPProtocolTCP
 	case "udp":
@@ -63,6 +65,10 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 	default:
 		// default to tcp
 		i.Protocol = layers.IPProtocolTCP
+	}
+
+	if i.MoreFragments || i.FragmentOffset > 0 {
+		i.FragmentationEnabled = true
 	}
 
 	for _, opt := range raw.Options {

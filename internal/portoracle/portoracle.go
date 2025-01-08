@@ -1,8 +1,15 @@
 package portoracle
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
+	"net"
+)
+
+const (
+	MINPORT int = 39152
+	MAXPORT int = 65535
 )
 
 type PortOracle struct {
@@ -43,4 +50,62 @@ func shufflePorts(ports []uint16) {
 		j := rand.Intn(i + 1)
 		ports[i], ports[j] = ports[j], ports[i]
 	}
+}
+
+func ReservePortRanges(numOfPorts int) (ports []net.Listener, err error) {
+	for min := MINPORT; len(ports) < numOfPorts && min <= MAXPORT; min++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", min))
+		if err != nil {
+			log.Printf("Port %d is in use\n", min)
+			continue
+		}
+		ln.Close()
+		ports = append(ports, ln)
+	}
+	if numOfPorts != len(ports) {
+		return nil, fmt.Errorf("not enough ports available, missing %d port(s)", numOfPorts-len(ports))
+	}
+	return ports, nil
+}
+
+func BuildPortRangeBPF(ports []net.Listener) string {
+	var previousPort, port, lastWrittenPort int
+	bpf := ""
+	if len(ports) == 1 {
+		return fmt.Sprintf("tcp dst port %d", ports[0].Addr().(*net.TCPAddr).Port)
+	}
+	for i, p := range ports {
+		port = p.Addr().(*net.TCPAddr).Port
+		if i == 0 {
+			lastWrittenPort = port
+			previousPort = port
+			continue
+		}
+		isLastIteration := i == len(ports)-1
+		if previousPort+1 != port || isLastIteration {
+			if isLastIteration && previousPort+1 == port {
+				previousPort = port
+			}
+			if lastWrittenPort == previousPort {
+				if bpf == "" {
+					bpf = fmt.Sprintf("tcp dst port %d", lastWrittenPort)
+				} else {
+					bpf += fmt.Sprintf(" or tcp dst port %d", lastWrittenPort)
+				}
+			} else {
+				if bpf == "" {
+					bpf = fmt.Sprintf("tcp dst portrange %d-%d", lastWrittenPort, previousPort)
+				} else {
+					bpf += fmt.Sprintf(" or tcp dst portrange %d-%d", lastWrittenPort, previousPort)
+				}
+			}
+
+			if isLastIteration && port != previousPort {
+				bpf += fmt.Sprintf(" or tcp dst port %d", port)
+			}
+			lastWrittenPort = port
+		}
+		previousPort = port
+	}
+	return bpf
 }

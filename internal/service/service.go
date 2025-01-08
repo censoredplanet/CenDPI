@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -15,11 +14,9 @@ import (
 	"github.com/censoredplanet/CenDPI/internal/http"
 	"github.com/censoredplanet/CenDPI/internal/ip"
 	"github.com/censoredplanet/CenDPI/internal/netcap"
-	"github.com/censoredplanet/CenDPI/internal/netutil"
 	"github.com/censoredplanet/CenDPI/internal/tcp"
 	"github.com/censoredplanet/CenDPI/internal/tls"
 	"github.com/gopacket/gopacket/layers"
-	"github.com/gopacket/gopacket/pcap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,6 +50,16 @@ type ServicePacket struct {
 	Delay    float64        `yaml:"delay"` // Per-packet delay in seconds
 }
 
+type Target struct {
+	TargetIP   string `json:"TargetIP"`
+	TargetPort uint16 `json:"TargetPort"`
+	SourcePort uint16 `json:"SourcePort"`
+	TestDomain string `json:"TestDomain"`
+	Protocol   string `json:"Protocol"` // e.g. "http" or "https"
+	IsControl  bool   `json:"IsDomain"`
+	Label      string `json:"Label"`
+}
+
 type FlowKey struct {
 	IP1   string
 	Port1 layers.TCPPort
@@ -79,6 +86,7 @@ func (s *ServiceConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	switch strings.ToLower(strings.TrimSpace(raw.base.Protocol)) {
+	// Since we dont handle the 'both' case anywhere in the code, should we remove it, or add support later on?
 	case "both", "https", "http":
 		s.Protocol = raw.base.Protocol
 	default:
@@ -114,19 +122,12 @@ func wrapError(err *error, str string, args ...any) {
 	}
 }
 
-func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, duration time.Duration, flowKey FlowKey) []netcap.PacketInfo {
-	var packets []netcap.PacketInfo
+func collectPackets(packetCh <-chan netcap.PacketInfo, duration time.Duration, flowKey FlowKey) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
-
 	for {
 		select {
-		case packet := <-packetChan:
-			err := netCap.WritePacketToPCAP(packet.Data.Data(), packet.Metadata.Timestamp)
-			if err != nil {
-				log.Printf("error writing to pcap: %v", err)
-			}
-
+		case packet := <-packetCh:
 			tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
 			if tcpLayer != nil {
 				t := tcpLayer.(*layers.TCP)
@@ -157,17 +158,17 @@ func collectPackets(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, du
 			}
 
 		case <-timer.C:
-			return packets
+			return
 		}
 	}
 }
 
-func sendAndCollect(netCap *netcap.NetCap, packetChan chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey FlowKey) error {
-	if err := netCap.SendPacket(pkt); err != nil {
+func sendAndCollect(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey FlowKey, port uint16) error {
+	if err := netCap.SendPacket(pkt, port); err != nil {
 		return err
 	}
 	if delay > 0 {
-		collectPackets(netCap, packetChan, delay, flowKey)
+		collectPackets(packetCh, delay, flowKey)
 	}
 	return nil
 }
@@ -222,7 +223,6 @@ func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
 
 	// reverse the domain
 	reverseDomain := tcp.RearrangeDomainIn16BitChunks(cfg.Domain)
-	//fmt.Printf("Control Domain: %s\n", controlDomain)
 
 	reverseBytes, err := buildSingleMessage(cfg, reverseDomain)
 	if err != nil {
@@ -232,220 +232,218 @@ func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
 	return payloadBytes, reverseBytes, nil
 }
 
-func Start(config ServiceConfig) (err error) {
+func Start(netCap *netcap.NetCap, probes []ServiceConfig, srcPort layers.TCPPort, targets []Target, packetCh <-chan netcap.PacketInfo, srcMAC *net.HardwareAddr, dstMAC *net.HardwareAddr) {
+	var err error
 	defer wrapError(&err, "CenDPI")
+skipProbe:
+	for _, probe := range probes {
+		//loop now all the domains to test for this vp
+		var dstIP net.IP
+		var dstPort layers.TCPPort
+		for _, target := range targets {
+			probe.Domain = target.TestDomain
+			dstIP = net.ParseIP(target.TargetIP)
+			dstPort = layers.TCPPort(target.TargetPort)
+			probe.Domain = target.TestDomain
+			probe.Protocol = target.Protocol
 
-	iface, err := netutil.GetInterfaceMAC(config.Iface)
-	if err != nil {
-		return err
-	}
-	// Redundant, but will keep for now
-	config.BPF = "tcp and src host " + config.DstIP.String()
+			probe.IsControl = target.IsControl
+			probe.SrcPort, probe.DstPort = srcPort, dstPort
+			probe.DstIP = dstIP
+			probe.Label = target.Label
 
-	netCapConfig := netcap.NetCapConfig{
-		Interface:      iface,
-		SnapLen:        65536,
-		Timeout:        pcap.BlockForever,
-		ReadBufferSize: 65536,
-		PCAPFile:       config.PcapPath,
-		BPF:            config.BPF,
-	}
-
-	netCap, err := netcap.New(netCapConfig)
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	packetChan := netCap.StartPacketReceiver(ctx)
-
-	flowKey := NormalizeFlowKey(config.SrcIP, config.SrcPort, config.DstIP, config.DstPort)
-	for n, p := range config.Packets {
-		if n == 0 {
-			initSeq := rand.Uint32()
-			tcpStates[flowKey] = tcpState{
-				SeqNum:     initSeq,
-				AckNum:     0,
-				InitialSeq: initSeq,
-			}
-		}
-		p.IP.SrcIP, p.IP.DstIP = config.SrcIP, config.DstIP
-		hasTCP := false
-		if p.TCP != nil {
-			hasTCP = true
-			p.TCP.SrcPort, p.TCP.DstPort = config.SrcPort, config.DstPort
-		}
-		if config.Message.TLS != nil {
-			config.Message.TLS.ClientHelloConfig.SNI = config.Domain
-		}
-
-		// --------------------------------------------------
-		// Case 1: We have a TCP layer in the config
-		// --------------------------------------------------
-		if hasTCP {
-			state := tcpStates[flowKey]
-
-			// Derive the actual Seq/Ack from state and relative offsets
-			p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
-			curIsq := state.InitialSeq
-
-			if p.TCP.SeqRelativeToExpected != 0 {
-				p.TCP.Seq = uint32(int64(p.TCP.Seq) + int64(p.TCP.SeqRelativeToExpected))
-			}
-			if p.TCP.AckRelativeToExpected != 0 {
-				p.TCP.Ack = uint32(int64(p.TCP.Ack) + int64(p.TCP.AckRelativeToExpected))
-			}
-			if p.TCP.SeqRelativeToInitial != 0 {
-				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
-			}
-
-			// If we have a "MessageLength" in the config, it means we want to slice
-			// from the overall application message.
-			if p.TCP.MessageLength != 0 {
-				// We expect no raw data in p.TCP.Data if we plan to slice the message.
-				if len(p.TCP.Data) != 0 {
-					return fmt.Errorf("packet %d: cannot specify both p.TCP.Data and p.TCP.MessageLength", n)
-				}
-				if config.Message == nil {
-					return fmt.Errorf("packet %d: asked for message slicing, but config.Message is nil", n)
-				}
-				// Build the application message if not done yet
-				if len(config.Message.PayloadBytes) == 0 {
-					rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(config)
-					if buildErr != nil {
-						return fmt.Errorf("packet %d: buildMessages error: %w", n, buildErr)
+			flowKey := NormalizeFlowKey(probe.SrcIP, srcPort, dstIP, dstPort)
+			for n, p := range probe.Packets {
+				if n == 0 {
+					initSeq := rand.Uint32()
+					tcpStates[flowKey] = tcpState{
+						SeqNum:     initSeq,
+						AckNum:     0,
+						InitialSeq: initSeq,
 					}
-					config.Message.PayloadBytes = rawPayloadBytes
-					config.Message.ReversePayloadBytes = rawReversedPayloadBytes
+				}
+				p.IP.SrcIP, p.IP.DstIP = probe.SrcIP, dstIP
+				if p.TCP != nil {
+
+				}
+				hasTCP := false
+				if p.TCP != nil {
+					hasTCP = true
+					p.TCP.SrcPort, p.TCP.DstPort = probe.SrcPort, probe.DstPort
+				}
+				if probe.Message.TLS != nil {
+					probe.Message.TLS.ClientHelloConfig.SNI = probe.Domain
 				}
 
-				messageOffsetBytes := p.TCP.MessageOffset // in bytes
-				var length int
-				if p.TCP.MessageLength == -1 {
-					// take entire remainder
-					length = len(config.Message.PayloadBytes) - messageOffsetBytes
-					if length < 1 {
-						return fmt.Errorf("packet %d: invalid segment offset (beyond message size)", n)
+				if hasTCP {
+					state := tcpStates[flowKey]
+
+					// Derive the actual Seq/Ack from state and relative offsets
+					p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
+					curIsq := state.InitialSeq
+
+					if p.TCP.SeqRelativeToExpected != 0 {
+						p.TCP.Seq = uint32(int64(p.TCP.Seq) + int64(p.TCP.SeqRelativeToExpected))
 					}
+					if p.TCP.AckRelativeToExpected != 0 {
+						p.TCP.Ack = uint32(int64(p.TCP.Ack) + int64(p.TCP.AckRelativeToExpected))
+					}
+					if p.TCP.SeqRelativeToInitial != 0 {
+						p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
+					}
+					// If we have a "MessageLength" in the config, it means we want to slice
+					// from the overall application message.
+					if p.TCP.MessageLength != 0 {
+						// We expect no raw data in p.TCP.Data if we plan to slice the message.
+						if len(p.TCP.Data) != 0 {
+							continue skipProbe
+						}
+						if probe.Message == nil {
+							log.Printf("packet %d: asked for message slicing, but config.Message is nil\n", n)
+							continue skipProbe
+						}
+						// Build the application message if not done yet
+						if len(probe.Message.PayloadBytes) == 0 {
+							rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(probe)
+							if buildErr != nil {
+								log.Printf("packet %d: buildMessages error: %v\n", n, buildErr)
+								continue skipProbe
+							}
+							probe.Message.PayloadBytes = rawPayloadBytes
+							probe.Message.ReversePayloadBytes = rawReversedPayloadBytes
+						}
+
+						messageOffsetBytes := p.TCP.MessageOffset // in bytes
+						var length int
+						if p.TCP.MessageLength == -1 {
+							// take entire remainder
+							length = len(probe.Message.PayloadBytes) - messageOffsetBytes
+							if length < 1 {
+								log.Printf("packet %d: invalid segment offset (beyond message size)\n", n)
+							}
+						} else {
+							length = p.TCP.MessageLength
+						}
+						endPos := messageOffsetBytes + length
+						if endPos > len(probe.Message.PayloadBytes) {
+							log.Printf("packet %d: segment out of range\n", n)
+						}
+						if p.TCP.ReverseDomain {
+							p.TCP.Data = probe.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
+						} else {
+							p.TCP.Data = probe.Message.PayloadBytes[messageOffsetBytes:endPos]
+						}
+					}
+
+					// Build the Ethernet/IP/TCP layers
+					packet, err := assembler.New().
+						AddLayer(ethernet.New(&p.Ethernet)).
+						AddLayer(ip.New(&p.IP)).
+						AddLayer(tcp.New(p.TCP)).
+						Build(p.TCP.CorruptChecksum)
+					if err != nil {
+						log.Printf("packet %d: Assembler Build error: %v\n", n, err)
+					}
+
+					if err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey, uint16(srcPort)); err != nil {
+						log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
+					}
+
 				} else {
-					length = p.TCP.MessageLength
-				}
-				endPos := messageOffsetBytes + length
-				if endPos > len(config.Message.PayloadBytes) {
-					return fmt.Errorf("packet %d: segment out of range", n)
-				}
-				if p.TCP.ReverseDomain {
-					p.TCP.Data = config.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
-				} else {
-					p.TCP.Data = config.Message.PayloadBytes[messageOffsetBytes:endPos]
-				}
-			}
+					// --------------------------------------------------
+					// Case 2: No TCP layer => IP fragmentation path?
+					// --------------------------------------------------
+					if p.IP.MessageLength != 0 {
+						if probe.Message == nil {
+							log.Printf("packet %d: IP fragmentation requested but config.Message is nil\n", n)
+							continue skipProbe
+						}
 
-			// Build the Ethernet/IP/TCP layers
-			packet, err := assembler.New().
-				AddLayer(ethernet.New(&p.Ethernet)).
-				AddLayer(ip.New(&p.IP)).
-				AddLayer(tcp.New(p.TCP)).
-				Build(p.TCP.CorruptChecksum)
-			if err != nil {
-				return fmt.Errorf("packet %d: Assembler Build error: %w", n, err)
-			}
+						// If we haven't built the application message yet, do so:
+						if len(probe.Message.PayloadBytes) == 0 {
+							rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(probe)
+							if buildErr != nil {
+								log.Printf("packet %d: buildMessages error: %v\n", n, buildErr)
+								continue skipProbe
+							}
+							state, ok := tcpStates[flowKey]
+							if !ok {
+								log.Printf("packet %d: no TCP state found for IP fragmentation\n", n)
+								continue skipProbe
+							}
+							tcpWrap := &tcp.TCPConfig{
+								SrcPort: probe.SrcPort,
+								DstPort: probe.DstPort,
+								Seq:     state.SeqNum,
+								Ack:     state.AckNum,
+								Flags:   tcp.TCPFlags{PSH: true, ACK: true},
+								Window:  2056,
+								Data:    rawPayloadBytes,
+							}
+							tcpWrapReversedPayload := &tcp.TCPConfig{
+								SrcPort: probe.SrcPort,
+								DstPort: probe.DstPort,
+								Seq:     state.SeqNum,
+								Ack:     state.AckNum,
+								Flags:   tcp.TCPFlags{PSH: true, ACK: true},
+								Window:  2056,
+								Data:    rawReversedPayloadBytes,
+							}
+							rawTCP, wrapErr := tcp.BuildAndSerialize(tcpWrap, p.IP.SrcIP, p.IP.DstIP)
+							if wrapErr != nil {
+								log.Printf("packet %d: building TCP for IP fragmentation error: %v\n", n, wrapErr)
+							}
+							rawTCPReversed, wrapErr := tcp.BuildAndSerialize(tcpWrapReversedPayload, p.IP.SrcIP, p.IP.DstIP)
+							if wrapErr != nil {
+								log.Printf("packet %d: building TCP for IP fragmentation error: %v\n", n, wrapErr)
+							}
+							probe.Message.PayloadBytes = rawTCP
+							probe.Message.ReversePayloadBytes = rawTCPReversed
+						}
 
-			if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay* float64(time.Second)), flowKey); err != nil {
-				return fmt.Errorf("packet %d: sendAndCollect error: %w", n, err)
-			}
+						messageOffsetBytes := p.IP.MessageOffset
+						if messageOffsetBytes%8 != 0 {
+							log.Printf("packet %d: message offset for IP fragmentation must be a multiple of 8 bytes\n", n)
+						}
+						var length int
+						if p.IP.MessageLength == -1 {
+							length = len(probe.Message.PayloadBytes) - messageOffsetBytes
+							if length < 1 {
+								log.Printf("packet %d: invalid fragment offset (beyond message size)\n", n)
+							}
+						} else {
+							length = p.IP.MessageLength
+						}
 
-		} else {
-			// --------------------------------------------------
-			// Case 2: No TCP layer => IP fragmentation path?
-			// --------------------------------------------------
-			if p.IP.MessageLength != 0 {
-				if config.Message == nil {
-					return fmt.Errorf("packet %d: IP fragmentation requested but config.Message is nil", n)
-				}
-				// If we haven't built the application message yet, do so:
-				if len(config.Message.PayloadBytes) == 0 {
-					rawPayloadBytes, rawReversedPayloadBytes, buildErr := buildMessages(config)
-					if buildErr != nil {
-						return fmt.Errorf("packet %d: buildMessages error: %w", n, buildErr)
+						endPos := messageOffsetBytes + length
+						if endPos > len(probe.Message.PayloadBytes) {
+							log.Printf("packet %d: fragment out of range\n", n)
+						}
+						fragmentPayload := probe.Message.PayloadBytes[messageOffsetBytes:endPos]
+						if p.IP.ReverseDomain {
+							fragmentPayload = probe.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
+						}
+
+						// Build Ethernet/IP (with the fragment payload)
+						packet, err := assembler.New().
+							AddLayer(ethernet.New(&p.Ethernet)).
+							AddLayer(ip.NewWithPayload(&p.IP, fragmentPayload)).
+							Build(false)
+						if err != nil {
+							log.Printf("packet %d: Assembler Build error: %v\n", n, err)
+						}
+
+						if err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey, uint16(srcPort)); err != nil {
+							log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
+						}
+
+					} else {
+						// No TCP and no fragmentation => nothing to send
+						log.Printf("packet %d: No TCP layer specified and no IP fragmentation => nothing to send\n", n)
+						continue skipProbe
 					}
-					state, ok := tcpStates[flowKey]
-					if !ok {
-						return fmt.Errorf("packet %d: no TCP state found for IP fragmentation", n)
-					}
-					tcpWrap := &tcp.TCPConfig{
-						SrcPort: config.SrcPort,
-						DstPort: config.DstPort,
-						Seq:     state.SeqNum,
-						Ack:     state.AckNum,
-						Flags:   tcp.TCPFlags{PSH: true, ACK: true},
-						Window:  2056,
-						Data:    rawPayloadBytes,
-					}
-					tcpWrapReversedPayload := &tcp.TCPConfig{
-						SrcPort: config.SrcPort,
-						DstPort: config.DstPort,
-						Seq:     state.SeqNum,
-						Ack:     state.AckNum,
-						Flags:   tcp.TCPFlags{PSH: true, ACK: true},
-						Window:  2056,
-						Data:    rawReversedPayloadBytes,
-					}
-					rawTCP, wrapErr := tcp.BuildAndSerialize(tcpWrap, p.IP.SrcIP, p.IP.DstIP)
-					if wrapErr != nil {
-						return fmt.Errorf("packet %d: building TCP for IP fragmentation error: %w", n, wrapErr)
-					}
-					rawTCPReversed, wrapErr := tcp.BuildAndSerialize(tcpWrapReversedPayload, p.IP.SrcIP, p.IP.DstIP)
-					if wrapErr != nil {
-						return fmt.Errorf("packet %d: building TCP for IP fragmentation error: %w", n, wrapErr)
-					}
-					config.Message.PayloadBytes = rawTCP
-					config.Message.ReversePayloadBytes = rawTCPReversed
 				}
-
-				messageOffsetBytes := p.IP.MessageOffset
-				if messageOffsetBytes%8 != 0 {
-					return fmt.Errorf("packet %d: message offset for IP fragmentation must be a multiple of 8 bytes", n)
-				}
-				var length int
-				if p.IP.MessageLength == -1 {
-					length = len(config.Message.PayloadBytes) - messageOffsetBytes
-					if length < 1 {
-						return fmt.Errorf("packet %d: invalid fragment offset (beyond message size)", n)
-					}
-				} else {
-					length = p.IP.MessageLength
-				}
-
-				endPos := messageOffsetBytes + length
-				if endPos > len(config.Message.PayloadBytes) {
-					return fmt.Errorf("packet %d: fragment out of range", n)
-				}
-				fragmentPayload := config.Message.PayloadBytes[messageOffsetBytes:endPos]
-				if p.IP.ReverseDomain {
-					fragmentPayload = config.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
-				}
-
-				// Build Ethernet/IP (with the fragment payload)
-				packet, err := assembler.New().
-					AddLayer(ethernet.New(&p.Ethernet)).
-					AddLayer(ip.NewWithPayload(&p.IP, fragmentPayload)).
-					Build(false)
-				if err != nil {
-					return fmt.Errorf("packet %d: Assembler Build error: %w", n, err)
-				}
-
-				if err := sendAndCollect(netCap, packetChan, packet, time.Duration(p.Delay* float64(time.Second)), flowKey); err != nil {
-					return fmt.Errorf("packet %d: sendAndCollect error: %w", n, err)
-				}
-
-			} else {
-				// No TCP and no fragmentation => nothing to send
-				return fmt.Errorf("packet %d: No TCP layer specified and no IP fragmentation => nothing to send", n)
 			}
 		}
 	}
-	return nil
 }

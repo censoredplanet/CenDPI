@@ -1,5 +1,5 @@
 interface: en0
-pcapPath: "test.pcap"
+resultsPath: results
 sourceMAC: f4:d4:88:74:62:40
 gatewayMAC: 7c:10:c9:72:ef:c0
 sourceIP: 192.168.51.180
