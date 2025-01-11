@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	MINPORT int = 39152
-	MAXPORT int = 65535
+	MINPORT uint16 = 39152
+	MAXPORT uint16 = 65535
 )
 
 type PortOracle struct {
@@ -52,14 +52,13 @@ func shufflePorts(ports []uint16) {
 	}
 }
 
-func ReservePortRanges(numOfPorts int) (ports []net.Listener, err error) {
-	for min := MINPORT; len(ports) < numOfPorts && min <= MAXPORT; min++ {
+func ReservePortRanges(numOfPorts int, startSourcePort uint16) (ports []net.Listener, err error) {
+	for min := startSourcePort; len(ports) < numOfPorts && min <= MAXPORT; min++ {
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", min))
 		if err != nil {
 			log.Printf("Port %d is in use\n", min)
 			continue
 		}
-		ln.Close()
 		ports = append(ports, ln)
 	}
 	if numOfPorts != len(ports) {

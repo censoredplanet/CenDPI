@@ -67,7 +67,7 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 		i.Protocol = layers.IPProtocolTCP
 	}
 
-	if i.MoreFragments || i.FragmentOffset > 0 {
+	if i.MoreFragments || i.FragmentOffset > 0 || i.MessageLength != 0 || i.MessageOffset != 0 {
 		i.FragmentationEnabled = true
 	}
 

@@ -8,9 +8,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
-
+	"bytes"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcap"
@@ -28,9 +27,40 @@ type NetCapConfig struct {
 
 type NetCap struct {
 	Handle      *pcap.Handle
-	pcapWriters map[uint16]*pcapgo.Writer
+	pcapWriters map[FlowKey]*pcapgo.Writer
 	pcapFiles   []*os.File
 	Config      NetCapConfig
+}
+
+type NetCapPcapInfo struct {
+	TargetIP   net.IP
+	TargetPort layers.TCPPort
+	IsControl  bool
+	ProbeName  string
+}
+
+type FlowKey struct {
+	IP1   string
+	Port1 layers.TCPPort
+	IP2   string
+	Port2 layers.TCPPort
+}
+
+func NormalizeFlowKey(srcIP net.IP, srcPort layers.TCPPort, dstIP net.IP, dstPort layers.TCPPort) FlowKey {
+	a := srcIP.To16()
+	b := dstIP.To16()
+
+	cmp := bytes.Compare(a, b)
+	if cmp == 0 {
+		if srcPort < dstPort {
+			return FlowKey{IP1: srcIP.String(), Port1: srcPort, IP2: dstIP.String(), Port2: dstPort}
+		}
+		return FlowKey{IP1: dstIP.String(), Port1: dstPort, IP2: srcIP.String(), Port2: srcPort}
+	} else if cmp < 0 {
+		return FlowKey{IP1: srcIP.String(), Port1: srcPort, IP2: dstIP.String(), Port2: dstPort}
+	} else {
+		return FlowKey{IP1: dstIP.String(), Port1: dstPort, IP2: srcIP.String(), Port2: srcPort}
+	}
 }
 
 func New(config NetCapConfig) (*NetCap, error) {
@@ -54,7 +84,7 @@ func New(config NetCapConfig) (*NetCap, error) {
 	return &NetCap{
 		Handle:      handle,
 		Config:      config,
-		pcapWriters: make(map[uint16]*pcapgo.Writer),
+		pcapWriters: make(map[FlowKey]*pcapgo.Writer),
 		pcapFiles:   []*os.File{},
 	}, nil
 }
@@ -78,9 +108,14 @@ func (n *NetCap) WritePacketToPCAP(writer *pcapgo.Writer, packet []byte, capture
 	return nil
 }
 
-func (n *NetCap) SendPacket(packet []byte, port uint16) error {
+func (n *NetCap) SendPacket(packet []byte, flowKey FlowKey) error {
+
+	if _, ok := n.pcapWriters[flowKey]; !ok {
+		log.Fatalf("FlowKey %v does not exist in the map", flowKey)
+	}
+
 	// Write packet to pcap file before sending
-	if err := n.WritePacketToPCAP(n.pcapWriters[port], packet, time.Now()); err != nil {
+	if err := n.WritePacketToPCAP(n.pcapWriters[flowKey], packet, time.Now()); err != nil {
 		return err
 	}
 	if err := n.Handle.WritePacketData(packet); err != nil {
@@ -94,10 +129,13 @@ type PacketInfo struct {
 	Metadata *gopacket.PacketMetadata
 	Seq      uint32
 	Ack      uint32
-	Port     uint16
+	SrcIP	 net.IP
+	DstIP	 net.IP
+	SrcPort  layers.TCPPort
+	DstPort  layers.TCPPort
 }
 
-func (n *NetCap) StartPacketReceiver(ctx context.Context, chMap map[uint16]chan PacketInfo, saveCh chan<- PacketInfo) {
+func (n *NetCap) StartPacketReceiver(ctx context.Context, chMap map[FlowKey]chan PacketInfo) {
 	go func() {
 		packetSource := gopacket.NewPacketSource(n.Handle, n.Handle.LinkType())
 		for {
@@ -115,24 +153,55 @@ func (n *NetCap) StartPacketReceiver(ctx context.Context, chMap map[uint16]chan 
 					continue
 				}
 
-				tcp := packet.TransportLayer().(*layers.TCP)
-				port := uint16(tcp.DstPort)
+				// Make sure this packet actually has a TCP layer
+                tcpLayer := packet.Layer(layers.LayerTypeTCP)
+                if tcpLayer == nil {
+                    continue
+                }
+                tcp, ok := tcpLayer.(*layers.TCP)
+                if !ok {
+                    continue
+                }
+
+				netLayer := packet.NetworkLayer()
+                if netLayer == nil {
+                    continue
+                }
+
+                var srcIP, dstIP net.IP
+                switch nl := netLayer.(type) {
+                case *layers.IPv4:
+                    srcIP = nl.SrcIP
+                    dstIP = nl.DstIP
+                default:
+                    // Maybe IPv6; skip
+                    continue
+                }
 
 				packetInfo := PacketInfo{
 					Data:     packet,
 					Metadata: packet.Metadata(),
 					Seq:      tcp.Seq,
 					Ack:      tcp.Ack,
-					Port:     port,
+					SrcIP:    srcIP,
+                    DstIP:    dstIP,
+                    SrcPort:  tcp.SrcPort,
+                    DstPort:  tcp.DstPort,
 				}
-				if ch, ok := chMap[port]; ok {
+				flowkey := NormalizeFlowKey(srcIP, tcp.SrcPort, dstIP, tcp.DstPort)
+				if ch, ok := chMap[flowkey]; ok {
 					select {
 					case ch <- packetInfo:
+						// Also write to pcap after sending
+						if _, ok := n.pcapWriters[flowkey]; !ok {
+							log.Fatalf("FlowKey %v does not exist in the pcapWriters", flowkey)
+						}
+						writer := n.pcapWriters[flowkey]
+						n.WritePacketToPCAP(writer, packetInfo.Data.Data(), packetInfo.Metadata.Timestamp)
 					default:
-						log.Printf("Channel for port %d is full", port)
+						log.Println("Channel for the flow SrcIP:", srcIP, "DstIP:", dstIP, "SrcPort:", tcp.SrcPort, "DstPort:", tcp.DstPort, "is full")
 					}
 				}
-				saveCh <- packetInfo
 			}
 		}
 	}()
@@ -145,43 +214,46 @@ func BuildTCPResponseFilter(srcIP, dstIP net.IP, srcPort, dstPort int) string {
 	)
 }
 
-func (n *NetCap) SetupPCAPWriters(portToIP map[uint16]string, path string) error {
+func (n *NetCap) SetupPCAPWriters(flowKeyToPcap map[FlowKey]NetCapPcapInfo, path string) error {
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", path, err)
 	}
-	for port, ip := range portToIP {
-		fileName := filepath.Join(path, fmt.Sprintf("%s.pcap", strings.ReplaceAll(ip, ".", "-")))
-		f, err := os.Create(fileName)
-		if err != nil {
-			return err
-		}
+	// for each flowkey, create a pcap file. The path should be [path passed in]/[dstIP]:[dstPort]/ProbeName_[test/control (depending on the value of NetCapPcapInfo.IsControl)].pcap
+	for flowKey, pcapInfo := range flowKeyToPcap {
+		
+		// Subdirectory named "dstIP:dstPort"
+        subdir := fmt.Sprintf("%s:%d", pcapInfo.TargetIP.String(), pcapInfo.TargetPort)
+        subdirFullPath := filepath.Join(path, subdir)
+
+		if err := os.MkdirAll(subdirFullPath, 0755); err != nil {
+            return fmt.Errorf("failed to create subdir %s: %w", subdirFullPath, err)
+        }
+
+		// filename: e.g. "0_0_standard_request_test.pcap" or "0_0_standard_request_control.pcap"
+        testOrControl := "control"
+        if !pcapInfo.IsControl {
+            testOrControl = "test"
+        }
+        fileName := fmt.Sprintf("%s_%s.pcap", pcapInfo.ProbeName, testOrControl)
+        fullFilePath := filepath.Join(subdirFullPath, fileName)
+
+		// Create the file
+        f, err := os.Create(fullFilePath)
+        if err != nil {
+            return fmt.Errorf("failed to create pcap file %s: %w", fullFilePath, err)
+        }
+
 		w := pcapgo.NewWriter(f)
-		err = w.WriteFileHeader(uint32(n.Config.SnapLen), n.Handle.LinkType())
-		if err != nil {
-			f.Close()
-			return fmt.Errorf("failed to write pcap header for %s: %w", fileName, err)
-		}
-		n.pcapWriters[port] = w
+        err = w.WriteFileHeader(uint32(n.Config.SnapLen), n.Handle.LinkType())
+        if err != nil {
+            f.Close()
+            return fmt.Errorf("failed to write pcap header for %s: %w", fullFilePath, err)
+        }
+		n.pcapWriters[flowKey] = w
 		n.pcapFiles = append(n.pcapFiles, f)
 	}
-
 	return nil
-
-}
-
-func (n *NetCap) SavePackets(ctx context.Context, ch <-chan PacketInfo) {
-	go func() {
-		for {
-			select {
-			case packet := <-ch:
-				writer := n.pcapWriters[packet.Port]
-				n.WritePacketToPCAP(writer, packet.Data.Data(), packet.Metadata.Timestamp)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 }
 
 func (n *NetCap) Close() {

@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 	"os"
 	"strings"
 	"sync"
-
+	"path/filepath"
 	"github.com/censoredplanet/CenDPI/internal/netcap"
 	"github.com/censoredplanet/CenDPI/internal/netutil"
 	"github.com/censoredplanet/CenDPI/internal/portoracle"
@@ -27,6 +28,7 @@ type GlobalMeasurementConfig struct {
 	SourceMAC   net.HardwareAddr `yaml:"-"`
 	GatewayMAC  net.HardwareAddr `yaml:"-"`
 	SourceIP    net.IP           `yaml:"-"`
+	StartSourcePort uint16       `yaml:"startSourcePort"`
 	Probelist   []string         `yaml:"probelist"`
 }
 
@@ -61,6 +63,10 @@ func (c *GlobalMeasurementConfig) UnmarshalYAML(node *yaml.Node) error {
 		log.Fatal("the measurement yaml file needs to specify the sourceMAC, gatewayMAC and sourceIP")
 	}
 
+	if c.StartSourcePort < portoracle.MINPORT || c.StartSourcePort > portoracle.MAXPORT {
+		c.StartSourcePort = portoracle.MINPORT
+	}
+
 	return nil
 }
 
@@ -76,34 +82,33 @@ func parseGlobalMeasurementConfig(path string) (*GlobalMeasurementConfig, error)
 	return &cfg, nil
 }
 
-func parseTargetsJSONL(path string) (map[string][]service.Target, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
+func parseTargetsJSONL(path string) ([]service.Target, error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
 
-	targets := make(map[string][]service.Target)
+    var targets []service.Target
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+        line := strings.TrimSpace(scanner.Text())
+        if line == "" || strings.HasPrefix(line, "#") {
+            // skip empty lines or comment lines
+            continue
+        }
+        var tgt service.Target
+        if err := json.Unmarshal([]byte(line), &tgt); err != nil {
+            return nil, fmt.Errorf("json decode error on line: %s\n%v", line, err)
+        }
+        targets = append(targets, tgt)
+    }
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			// skip empty lines or comment lines
-			continue
-		}
-		var tgt service.Target
-		if err := json.Unmarshal([]byte(line), &tgt); err != nil {
-			return nil, fmt.Errorf("json decode error on line: %s\n%v", line, err)
-		}
-		targets[tgt.TargetIP] = append(targets[tgt.TargetIP], tgt)
-	}
+    if err := scanner.Err(); err != nil {
+        return nil, err
+    }
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return targets, nil
+    return targets, nil
 }
 
 func parseProbeConfigYAML(path string, cfg *GlobalMeasurementConfig) (service.ServiceConfig, error) {
@@ -116,6 +121,12 @@ func parseProbeConfigYAML(path string, cfg *GlobalMeasurementConfig) (service.Se
 	if err := yaml.Unmarshal(ymlData, &config); err != nil {
 		return service.ServiceConfig{}, err
 	}
+
+	// Use the base filename (strips directories and .yml/.yaml extension)
+    filename := filepath.Base(path)
+    nameOnly := strings.TrimSuffix(filename, filepath.Ext(filename))
+    config.Name = nameOnly
+
 	for i := range config.Packets {
 		config.Packets[i].Ethernet.SrcMAC = cfg.SourceMAC
 		config.Packets[i].Ethernet.DstMAC = cfg.GatewayMAC
@@ -130,6 +141,19 @@ func closePorts(ports []net.Listener) {
 		p.Close()
 	}
 }
+
+func copyServiceConfig(original service.ServiceConfig) (service.ServiceConfig, error) {
+    data, err := json.Marshal(original)
+    if err != nil {
+        return service.ServiceConfig{}, fmt.Errorf("marshal error: %w", err)
+    }
+    var copy service.ServiceConfig
+    if err := json.Unmarshal(data, &copy); err != nil {
+        return service.ServiceConfig{}, fmt.Errorf("unmarshal error: %w", err)
+    }
+    return copy, nil
+}
+
 
 func main() {
 	if os.Geteuid() != 0 {
@@ -156,7 +180,6 @@ func main() {
 
 	// build probe template
 	var probeTemplates []service.ServiceConfig
-probe:
 	for _, probeFile := range globalCfg.Probelist {
 		probeCfg, err := parseProbeConfigYAML(probeFile, globalCfg)
 		if err != nil {
@@ -166,36 +189,70 @@ probe:
 		// Check for edge case where no tcp and no fragmentation
 		for _, packet := range probeCfg.Packets {
 			if packet.TCP == nil && !packet.IP.FragmentationEnabled {
-				log.Fatal("Probe Invalid: no tcp packet and no fragmentation defined within the yaml file, Skipping")
-				continue probe
+				log.Fatal("Probe Invalid: no tcp packet and no fragmentation defined within the yaml file.")
 			}
 		}
 		probeCfg.SrcIP = globalCfg.SourceIP
-		probeTemplates = append(probeTemplates, probeCfg)
+
+		controlCfg, err := copyServiceConfig(probeCfg)
+		if err != nil {
+			log.Fatalf("Failed copying config for control: %v", err)
+		}
+		testCfg, err := copyServiceConfig(probeCfg)
+		if err != nil {
+			log.Fatalf("Failed copying config for test: %v", err)
+		}
+
+		controlCfg.IsControl = true
+		testCfg.IsControl = false
+
+        probeTemplates = append(probeTemplates, controlCfg)
+		probeTemplates = append(probeTemplates, testCfg)
 	}
 
-	// get sequential ports to build port range based BPF
-	ports, err := portoracle.ReservePortRanges(len(targets))
+	// get sequential ports
+	ports, err := portoracle.ReservePortRanges(len(probeTemplates), globalCfg.StartSourcePort)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer closePorts(ports)
-	// channel lookup map
-	chMap := make(map[uint16]chan netcap.PacketInfo)
-	// port to ip lookup map
-	portToIP := make(map[uint16]string)
-	var ips []string
-	for ip := range targets {
-		ips = append(ips, ip)
-	}
-	for i, port := range ports {
-		p := uint16(port.Addr().(*net.TCPAddr).Port)
-		portToIP[p] = ips[i]
-		ch := make(chan netcap.PacketInfo, 10)
-		chMap[p] = ch
-	}
 
-	var wg sync.WaitGroup
+	// assign each probe a unique source port
+    for i, port := range ports {
+        p := uint16(port.Addr().(*net.TCPAddr).Port)
+        probeTemplates[i].SrcPort = layers.TCPPort(p)
+    }
+
+	// channel lookup map, each TCP connection has its own channel
+	chMap := make(map[netcap.FlowKey]chan netcap.PacketInfo)
+
+	// pcap info lookup map
+	flowKeyToPcap := make(map[netcap.FlowKey]netcap.NetCapPcapInfo, len(probeTemplates)*len(targets))
+
+	// pre-populate the channel map
+	for _, probe := range probeTemplates {
+		for _, tgt := range targets {
+			dstIP := net.ParseIP(tgt.TargetIP)
+            dstPort := layers.TCPPort(tgt.TargetPort)
+            flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, dstIP, dstPort)
+
+			// ensure no duplicate flowKey
+			if _, ok := chMap[flowKey]; ok {
+				log.Fatalf("Duplicate flowKey: %v", flowKey)
+			}
+			chMap[flowKey] = make(chan netcap.PacketInfo, 100)
+
+			pcapInfo := netcap.NetCapPcapInfo{
+                TargetIP:   dstIP,
+                TargetPort: dstPort,
+                IsControl:  probe.IsControl,
+                ProbeName:  probe.Name,
+            }
+            flowKeyToPcap[flowKey] = pcapInfo
+		}
+	}
+	log.Println("Channel map populated with num of channels:", len(chMap))
+	
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -215,38 +272,45 @@ probe:
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer netCap.Close()
 
-	err = netCap.SetupPCAPWriters(portToIP, globalCfg.ResultsPath)
+	err = netCap.SetupPCAPWriters(flowKeyToPcap, globalCfg.ResultsPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	saveCh := make(chan netcap.PacketInfo, 100)
+	netCap.StartPacketReceiver(ctx, chMap)
 
-	netCap.StartPacketReceiver(ctx, chMap, saveCh)
-	netCap.SavePackets(ctx, saveCh)
-	defer netCap.Close()
+	for _, probe := range probeTemplates {
+        log.Printf("=== Starting Probe Round: %s ===", probe.Name)
+		
+		// Run all targets in *this* probe concurrently.
+        // Then wait for them before moving on to the next probe.
+        var roundWG sync.WaitGroup
+		for _, tgt := range targets {
+            roundWG.Add(1)
+			probeCopy, err := copyServiceConfig(probe)
+			if err != nil {
+				log.Fatalf("Failed copying config for targets: %v", err)
+			}
+            go func(c service.ServiceConfig, t service.Target) {
+                defer roundWG.Done()
+                flowKey := netcap.NormalizeFlowKey(c.SrcIP, c.SrcPort, net.ParseIP(t.TargetIP), layers.TCPPort(t.TargetPort))
+				if _, ok := chMap[flowKey]; !ok {
+					log.Fatalf("FlowKey not found in chMap: %v", flowKey)
+				}
+				service.StartSingleMeasurement(netCap, c,t, chMap[flowKey])
+            }(probeCopy, tgt)
+        }
 
-	for port, ip := range portToIP {
-		// get a copy of the probe templates
-		var probes []service.ServiceConfig
-		jsonData, err := json.Marshal(probeTemplates)
-		if err != nil {
-			log.Fatal(err)
+        // Wait for all targets in this probe to finish
+        roundWG.Wait()
+        log.Printf("=== Finished Probe Round: %s ===", probe.Name)
+		if !probe.IsControl {
+			time.Sleep(5 * time.Second)
+			// TODO: change it to 120 seconds for the final measurement
 		}
-		json.Unmarshal(jsonData, &probes)
-
-		srcPort := layers.TCPPort(port)
-		log.Printf("target: %s, source port: %s", ip, srcPort.String())
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			service.Start(netCap, probes, srcPort, targets[ip], chMap[port], &globalCfg.SourceMAC, &globalCfg.GatewayMAC)
-		}()
 	}
-
-	wg.Wait()
 	cancel()
 	log.Println("All measurements done.")
 }
