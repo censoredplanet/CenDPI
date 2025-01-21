@@ -47,7 +47,7 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 	type base IPConfig
 	raw := struct {
 		base    `yaml:",inline"`
-		proto   string      `yaml:"protocol"`
+		Proto   string      `yaml:"protocol"`
 		Options []IPOptions `yaml:"ipOptions"`
 	}{}
 
@@ -57,7 +57,7 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 
 	*i = IPConfig(raw.base)
 
-	switch strings.ToLower(strings.TrimSpace(raw.proto)) {
+	switch strings.ToLower(strings.TrimSpace(raw.Proto)) {
 	case "tcp":
 		i.Protocol = layers.IPProtocolTCP
 	case "udp":
