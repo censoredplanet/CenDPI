@@ -232,6 +232,9 @@ func main() {
 	// pre-populate the channel map
 	for _, probe := range probeTemplates {
 		for _, tgt := range targets {
+			if probe.Protocol != "both" && probe.Protocol != tgt.Protocol {
+				continue
+			}
 			dstIP := net.ParseIP(tgt.TargetIP)
             dstPort := layers.TCPPort(tgt.TargetPort)
             flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, dstIP, dstPort)
@@ -288,6 +291,9 @@ func main() {
         // Then wait for them before moving on to the next probe.
         var roundWG sync.WaitGroup
 		for _, tgt := range targets {
+			if probe.Protocol != "both" && probe.Protocol != tgt.Protocol {
+				continue
+			}
             roundWG.Add(1)
 			probeCopy, err := copyServiceConfig(probe)
 			if err != nil {
@@ -307,7 +313,7 @@ func main() {
         roundWG.Wait()
         log.Printf("=== Finished Probe Round: %s ===", probe.Name)
 		if !probe.IsControl {
-			time.Sleep(5 * time.Second)
+			time.Sleep(3 * time.Second)
 			// TODO: change it to 120 seconds for the final measurement
 		}
 	}
