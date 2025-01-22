@@ -30,6 +30,7 @@ type TCPConfig struct {
 	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial"`
 	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected"`
 	AckRelativeToExpected int                `yaml:"ackRelativeToExpected"`
+	ZeroAck			      bool               `yaml:"zeroAck"`
 	MessageOffset         int                `yaml:"messageOffset"`
 	MessageLength         int                `yaml:"messageLength"`
 	ReverseDomain         bool               `yaml:"reverseDomain"`

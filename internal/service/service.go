@@ -301,6 +301,9 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			if p.TCP.AckRelativeToExpected != 0 {
 				p.TCP.Ack = uint32(int64(p.TCP.Ack) + int64(p.TCP.AckRelativeToExpected))
 			}
+			if p.TCP.ZeroAck {
+				p.TCP.Ack = 0
+			}
 			if p.TCP.SeqRelativeToInitial != 0 {
 				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
 			}
@@ -329,6 +332,12 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				}
 
 				messageOffsetBytes := p.TCP.MessageOffset // in bytes
+				// Handle negative offset by padding zeros before the actual data
+				padLen := 0
+				if messageOffsetBytes < 0 {
+					padLen = -messageOffsetBytes
+                    messageOffsetBytes = 0
+                }
 				var length int
 				if p.TCP.MessageLength == -1 {
 					// take entire remainder
@@ -345,10 +354,17 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					log.Printf("packet %d: segment out of range\n", n)
 					break
 				}
+				var raw []byte
 				if p.TCP.ReverseDomain {
-					p.TCP.Data = probe.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
+					raw = probe.Message.ReversePayloadBytes[messageOffsetBytes:endPos]
 				} else {
-					p.TCP.Data = probe.Message.PayloadBytes[messageOffsetBytes:endPos]
+					raw = probe.Message.PayloadBytes[messageOffsetBytes:endPos]
+				}
+				if padLen > 0 {
+					pad := make([]byte, padLen)
+					p.TCP.Data = append(pad, raw...)
+				} else {
+					p.TCP.Data = raw
 				}
 			}
 
