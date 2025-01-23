@@ -72,7 +72,11 @@ func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	*t = TCPConfig(raw.base)
-	t.Data = []byte(raw.Data)
+	tcpData, err := hex.DecodeString(raw.Data)
+	if err != nil {
+		return fmt.Errorf("invalid hex in TCP data: '%s'", raw.Data)
+	}
+	t.Data = []byte(tcpData)
 	var tcpOpts layers.TCPOption
 	for _, opt := range raw.Options {
 		if opt.TCPOptionData != "" {
