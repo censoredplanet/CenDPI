@@ -1,0 +1,213 @@
+# yaml-language-server: $schema=./../cendpi-schema.json
+protocol: https
+message:
+  tls:
+    clientHelloConfig:
+      chVersion: "0303"
+    records:
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 0
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 16
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 32
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 48
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 64
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 80
+        length: 16
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 96
+        length: 63
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 159
+        length: -1
+
+packets:
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33345
+    tcp:
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+    delay: 1
+      
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33346
+    tcp:
+      window: 2056
+      flags:
+        ack: true
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 0
+      messageLength: 21
+      seqRelativeToInitial: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 21
+      messageLength: 21
+      seqRelativeToInitial: 22
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 42
+      messageLength: 21
+      seqRelativeToInitial: 43
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 63
+      messageLength: 21
+      seqRelativeToInitial: 64
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 84
+      messageLength: 21
+      seqRelativeToInitial: 85
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 105
+      messageLength: 21
+      seqRelativeToInitial: 106
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 126
+      messageLength: 68
+      seqRelativeToInitial: 127
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 194
+      messageLength: -1
+      seqRelativeToInitial: 195
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33349
+    tcp:
+      window: 2056
+      flags:
+        ack: true
+        fin: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33350
+    tcp:
+      window: 2056
+      flags:
+        ack: true

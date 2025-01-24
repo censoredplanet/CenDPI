@@ -135,6 +135,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -215,6 +216,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -295,6 +297,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -375,6 +378,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -455,6 +459,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -535,6 +540,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -615,6 +621,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -695,7 +702,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
-    delay: 0.5
+    delay: 1
 
   - ethernet:
     ip:

@@ -134,6 +134,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
+    delay: 1
 
   - ethernet:
     ip:
@@ -214,7 +215,7 @@ packets:
       fragmentOffset: 0
       messageOffset: 0
       messageLength: 16
-    delay: 0.5
+    delay: 1
 
   - ethernet:
     ip:
@@ -225,13 +226,25 @@ packets:
       fragmentOffset: 3
       messageOffset: 24
       messageLength: -1
-    delay: 1
+    delay: 0.5
 
   - ethernet:
     ip:
       tos: 0
       ttl: 64
       id: 33348
+      moreFragments: false
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: -1
+      reverseDomain: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33349
     tcp:
       window: 2056
       flags:
@@ -243,7 +256,7 @@ packets:
     ip:
       tos: 0
       ttl: 64
-      id: 33349
+      id: 33350
     tcp:
       window: 2056
       flags:
