@@ -54,8 +54,8 @@ packets:
           tcpOptionData: "06"
       seqRelativeToExpected: -1
       zeroAck: true
-      messageOffset: 0
-      messageLength: -1
+      messageOffset: -100
+      messageLength: 1
       reverseDomain: true
     delay: 1
       

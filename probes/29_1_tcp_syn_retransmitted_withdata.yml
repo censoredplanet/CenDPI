@@ -64,8 +64,9 @@ packets:
           tcpOptionLength: 3
           tcpOptionData: "06"
       seqRelativeToExpected: -1
-      messageOffset: 0
-      messageLength: -1
+      messageOffset: -100
+      messageLength: 1
+      zeroAck: true
     delay: 1
 
   - ethernet:

@@ -285,7 +285,11 @@ func main() {
 	netCap.StartPacketReceiver(ctx, chMap)
 
 	for _, probe := range probeTemplates {
-        log.Printf("=== Starting Probe Round: %s ===", probe.Name)
+		mode := "test"
+		if probe.IsControl {
+			mode = "control"
+		}
+		log.Printf("=== Starting Probe Round: %s (%s) ===", probe.Name, mode)
 		
 		// Run all targets in *this* probe concurrently.
         // Then wait for them before moving on to the next probe.
@@ -311,10 +315,11 @@ func main() {
 
         // Wait for all targets in this probe to finish
         roundWG.Wait()
-        log.Printf("=== Finished Probe Round: %s ===", probe.Name)
+		// 3 seconds wait between control and test of the same probe
+		time.Sleep(3 * time.Second)
 		if !probe.IsControl {
-			time.Sleep(3 * time.Second)
-			// TODO: change it to 120 seconds for the final measurement
+			// longer wait between consecutive probes
+			time.Sleep(120 * time.Second)
 		}
 	}
 	cancel()

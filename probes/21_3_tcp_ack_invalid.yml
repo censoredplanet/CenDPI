@@ -56,7 +56,7 @@ packets:
         ack: true
       messageOffset: 0
       messageLength: -1
-      ackRelativeToExpected: -1000
+      ackRelativeToExpected: -100
     delay: 1
 
   - ethernet:

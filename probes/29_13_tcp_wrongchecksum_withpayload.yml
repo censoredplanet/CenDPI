@@ -58,6 +58,7 @@ packets:
       messageOffset: -100
       messageLength: 1
       corruptChecksum: true
+      seqRelativeToInitial: 1
     delay: 1
 
   - ethernet:
@@ -72,6 +73,7 @@ packets:
         ack: true
       messageOffset: 0
       messageLength: -1
+      seqRelativeToInitial: 1
     delay: 1
 
   - ethernet:
