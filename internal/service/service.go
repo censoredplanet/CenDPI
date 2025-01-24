@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"strings"
+	"unicode"
 	"time"
 	"sync"
 	"github.com/censoredplanet/CenDPI/internal/assembler"
@@ -41,6 +42,12 @@ type ServiceConfig struct {
 type ServiceMessage struct {
 	HTTP                *http.HTTPConfig `yaml:"http"`
 	TLS                 *tls.TLSConfig   `yaml:"tls"`
+	DomainAllCaps 		bool 			 `yaml:"domainAllCaps"`
+	DomainRandomCase 	bool 			 `yaml:"domainRandomCase"`
+	DomainPrependStar 	bool 			 `yaml:"domainPrependStar"`
+	DomainAppendStar 	bool 			 `yaml:"domainAppendStar"`
+	DomainPrependSpace 	bool 			 `yaml:"domainPrependSpace"`
+	DomainAppendSpace 	bool 			 `yaml:"domainAppendSpace"`
 	PayloadBytes        []byte           // built with the original domain
 	ReversePayloadBytes []byte           // built with the reversed domain
 }
@@ -243,6 +250,18 @@ func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
 	return payloadBytes, reverseBytes, nil
 }
 
+func randomCase(s string) string {
+    var b strings.Builder
+    for _, r := range s {
+        if rand.IntN(2) == 0 {
+            b.WriteRune(unicode.ToLower(r))
+        } else {
+            b.WriteRune(unicode.ToUpper(r))
+        }
+    }
+    return b.String()
+}
+
 func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target Target, packetCh <-chan netcap.PacketInfo) {
 	var err error
 	defer wrapError(&err, "CenDPI")
@@ -251,6 +270,24 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	if probe.IsControl {
 		probe.Domain = target.ControlDomain
 	}
+	if probe.Message.DomainAllCaps {
+        probe.Domain = strings.ToUpper(probe.Domain)
+    } else if probe.Message.DomainRandomCase {
+        probe.Domain = randomCase(probe.Domain)
+    }
+	if probe.Message.DomainPrependStar {
+        probe.Domain = "*****" + probe.Domain
+    }
+    if probe.Message.DomainAppendStar {
+        probe.Domain = probe.Domain + "*****"
+    }
+	if probe.Message.DomainPrependSpace {
+        probe.Domain = "     " + probe.Domain
+    }
+    if probe.Message.DomainAppendSpace {
+        probe.Domain = probe.Domain + "     "
+    }
+
 	dstIP := net.ParseIP(target.TargetIP)
 	dstPort := layers.TCPPort(target.TargetPort)
 	probe.Protocol = target.Protocol

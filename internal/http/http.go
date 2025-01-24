@@ -31,9 +31,8 @@ const padding = "8d99a4b0f28d35fc3d18a5a655f2948969acd4210ded118bd7e7797ee3bfd91
 type HTTPConfig struct {
 	Request            string `yaml:"request"`
 	Domain             string
-	AllCapsHostDomain  bool `yaml:"allCapsHostDomain"`
-	AllLowerHostDomain bool `yaml:"allLowerHostDomain"`
-	Padding            bool
+	Padding            bool `yaml:"padding"`
+	LongPadding		   bool `yaml:"longPadding"`
 }
 
 func (h *HTTPConfig) UnmarshalYAML(node *yaml.Node) error {
@@ -53,17 +52,15 @@ func (h *HTTPConfig) UnmarshalYAML(node *yaml.Node) error {
 
 func BuildHTTPRequest(cfg *HTTPConfig) ([]byte, error) {
 	hostDomain := cfg.Domain
-	if cfg.AllCapsHostDomain {
-		hostDomain = strings.ToUpper(hostDomain)
-	} else if cfg.AllLowerHostDomain {
-		hostDomain = strings.ToLower(hostDomain)
-	}
+	
 	// replace ${} with cfg.Domain
 	request := cfg.Request
 	request = strings.Replace(request, "${}", hostDomain, 1)
 
 	if cfg.Padding {
-		request = strings.Replace(request, "\r\n\r\n", "\r\nX-Padding: "+padding+"\r\n\r\n", 1)
+		request = strings.Replace(request, "Host:", "X-Padding: "+padding+"\r\nHost:", 1)
+	} else if cfg.LongPadding {
+		request = strings.Replace(request, "Host:", "X-Padding: "+padding+padding+"\r\nHost:", 1)
 	}
 
 	return []byte(request), nil
