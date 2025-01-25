@@ -55,6 +55,7 @@ packets:
       flags:
         rst: true
         syn: true
+      zeroAck: true
     delay: 1
 
   - ethernet:

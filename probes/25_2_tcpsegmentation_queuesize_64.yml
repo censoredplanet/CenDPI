@@ -954,6 +954,22 @@ packets:
     ip:
       tos: 0
       ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 0
+      messageLength: -1
+      seqRelativeToInitial: 1
+      reverseDomain: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
       id: 33350
     tcp:
       window: 2056

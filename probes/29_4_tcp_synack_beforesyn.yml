@@ -24,7 +24,7 @@ packets:
       flags:
         syn: true
         ack: true
-      ackRelativeToExpected: 2000000
+      ackRelativeToExpected: 0
     delay: 1
 
 

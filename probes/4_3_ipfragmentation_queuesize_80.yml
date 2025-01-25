@@ -850,110 +850,9 @@ packets:
       tos: 0
       ttl: 64
       id: 33347
-      moreFragments: true
+      moreFragments: false
       fragmentOffset: 158
       messageOffset: 1264
-      messageLength: 16
-    delay: 1
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 160
-      messageOffset: 1280
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 162
-      messageOffset: 1296
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 164
-      messageOffset: 1312
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 166
-      messageOffset: 1328
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 168
-      messageOffset: 1344
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 170
-      messageOffset: 1360
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 172
-      messageOffset: 1376
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 174
-      messageOffset: 1392
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 176
-      messageOffset: 1408
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: false
-      fragmentOffset: 178
-      messageOffset: 1424
       messageLength: -1
     delay: 1
 
@@ -962,20 +861,9 @@ packets:
       tos: 0
       ttl: 64
       id: 50000
-      moreFragments: true
+      moreFragments: false
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 1200
-      reverseDomain: true
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 50000
-      moreFragments: false
-      fragmentOffset: 150
-      messageOffset: 1200
       messageLength: -1
       reverseDomain: true
     delay: 1

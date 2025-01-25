@@ -63,6 +63,18 @@ packets:
     ip:
       tos: 0
       ttl: 64
+      id: 0
+      moreFragments: false
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: -1
+      reverseDomain: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
       id: 33348
     tcp:
       window: 2056

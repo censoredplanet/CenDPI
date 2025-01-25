@@ -56,7 +56,7 @@ packets:
         ack: true
         psh: true
         fin: true
-        rst: true
+        rst: false
         urg: true
         ece: true
       messageOffset: 0

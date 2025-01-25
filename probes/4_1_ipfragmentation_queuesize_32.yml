@@ -375,20 +375,9 @@ packets:
       tos: 0
       ttl: 64
       id: 50000
-      moreFragments: true
+      moreFragments: false
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 1200
-      reverseDomain: true
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 50000
-      moreFragments: false
-      fragmentOffset: 150
-      messageOffset: 1200
       messageLength: -1
       reverseDomain: true
     delay: 1

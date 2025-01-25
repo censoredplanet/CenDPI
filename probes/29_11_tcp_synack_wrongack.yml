@@ -56,6 +56,7 @@ packets:
         syn: true
         ack: true
       ackRelativeToExpected: -1
+    delay: 1
 
   - ethernet:
     ip:

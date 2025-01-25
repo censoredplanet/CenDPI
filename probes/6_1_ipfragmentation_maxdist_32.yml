@@ -390,7 +390,7 @@ packets:
       messageLength: -1
     delay: 0.5
 
-    - ethernet:
+  - ethernet:
     ip:
       tos: 0
       ttl: 64
