@@ -54,7 +54,7 @@ packets:
       moreFragments: true
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 16
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -62,19 +62,9 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 2
-      messageOffset: 16
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 4
-      messageOffset: 32
-      messageLength: 16
+      fragmentOffset: 3
+      messageOffset: 24
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -84,7 +74,7 @@ packets:
       moreFragments: true
       fragmentOffset: 6
       messageOffset: 48
-      messageLength: 16
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -92,19 +82,9 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 8
-      messageOffset: 64
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 10
-      messageOffset: 80
-      messageLength: 16
+      fragmentOffset: 9
+      messageOffset: 72
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -114,7 +94,7 @@ packets:
       moreFragments: true
       fragmentOffset: 12
       messageOffset: 96
-      messageLength: 16
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -122,20 +102,9 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 14
-      messageOffset: 112
-      messageLength: 16
-    delay: 1
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 16
-      messageOffset: 128
-      messageLength: 16
+      fragmentOffset: 15
+      messageOffset: 120
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -145,7 +114,7 @@ packets:
       moreFragments: true
       fragmentOffset: 18
       messageOffset: 144
-      messageLength: 16
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -153,19 +122,10 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 20
-      messageOffset: 160
-      messageLength: 16
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33347
-      moreFragments: true
-      fragmentOffset: 22
-      messageOffset: 176
-      messageLength: 16
+      fragmentOffset: 21
+      messageOffset: 168
+      messageLength: 24
+    delay: 1
 
   - ethernet:
     ip:
@@ -175,7 +135,7 @@ packets:
       moreFragments: true
       fragmentOffset: 24
       messageOffset: 192
-      messageLength: 16
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -183,9 +143,9 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 26
-      messageOffset: 208
-      messageLength: 16
+      fragmentOffset: 27
+      messageOffset: 216
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -193,9 +153,49 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 28
-      messageOffset: 224
-      messageLength: 16
+      fragmentOffset: 30
+      messageOffset: 240
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 33
+      messageOffset: 264
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 36
+      messageOffset: 288
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 39
+      messageOffset: 312
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 42
+      messageOffset: 336
+      messageLength: 24
 
   - ethernet:
     ip:
@@ -203,8 +203,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: false
-      fragmentOffset: 30
-      messageOffset: 240
+      fragmentOffset: 45
+      messageOffset: 360
       messageLength: -1
     delay: 1
 

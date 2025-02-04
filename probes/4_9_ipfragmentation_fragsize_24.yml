@@ -1,11 +1,13 @@
-# yaml-language-server: $schema=./../cendpi-schema.json
+# yaml-language-server: $schema=./cendpi-schema.json
 protocol: both
 message:
-  http: 
+  http:
     request: "GET / HTTP/1.1\r\nHost: ${}\r\nUser-Agent: curl/8.11.1\r\nAccept: */*\r\n\r\n"
+    padding: false
   tls:
     clientHelloConfig:
       chVersion: "0303"
+      pqKeyShare: true
     records:
       - contentType: "16"
         recordVersion: "0301"
@@ -48,26 +50,20 @@ packets:
     ip:
       tos: 0
       ttl: 64
-      id: 0
-    tcp:
-      window: 2056
-      flags:
-        rst: true
-        ack: true
-      ackRelativeToExpected: -2000000
-    delay: 1
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: 24
 
   - ethernet:
     ip:
       tos: 0
       ttl: 64
       id: 33347
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 0
+      moreFragments: false
+      fragmentOffset: 3
+      messageOffset: 24
       messageLength: -1
     delay: 1
 
@@ -75,7 +71,19 @@ packets:
     ip:
       tos: 0
       ttl: 64
-      id: 33349
+      id: 50000
+      moreFragments: false
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: -1
+      reverseDomain: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33348
     tcp:
       window: 2056
       flags:
@@ -87,8 +95,11 @@ packets:
     ip:
       tos: 0
       ttl: 64
-      id: 33350
+      id: 33349
     tcp:
       window: 2056
       flags:
         ack: true
+
+
+
