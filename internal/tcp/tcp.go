@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 
@@ -21,38 +22,39 @@ const (
 )
 
 type TCPConfig struct {
-	SrcPort               layers.TCPPort
-	DstPort               layers.TCPPort
-	Window                uint16 `yaml:"window"`
-	Urgent                uint16 `yaml:"urgentPointer"`
-	Seq                   uint32
-	Ack                   uint32
-	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial"`
-	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected"`
-	AckRelativeToExpected int                `yaml:"ackRelativeToExpected"`
-	ZeroAck			      bool               `yaml:"zeroAck"`
-	MessageOffset         int                `yaml:"messageOffset"`
-	MessageLength         int                `yaml:"messageLength"`
-	ReverseDomain         bool               `yaml:"reverseDomain"`
-	Data                  []byte             `yaml:"-"`
-	Options               []layers.TCPOption `yaml:"-"`
-	CorruptChecksum       bool               `yaml:"corruptChecksum"`
-	Flags                 TCPFlags           `yaml:"flags"`
+	SrcPort               layers.TCPPort     `json:"SrcPort"`
+	DstPort               layers.TCPPort     `json:"DstPort"`
+	Window                uint16             `yaml:"window" json:"Window"`
+	Urgent                uint16             `yaml:"urgentPointer" json:"Urgent"`
+	Seq                   uint32             `json:"Seq"`
+	Ack                   uint32             `json:"Ack"`
+	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial" json:"-"`
+	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected" json:"-"`
+	AckRelativeToExpected int                `yaml:"ackRelativeToExpected" json:"-"`
+	ZeroAck               bool               `yaml:"zeroAck" json:"-"`
+	MessageOffset         int                `yaml:"messageOffset" json:"MassageOffset"`
+	MessageLength         int                `yaml:"messageLength" json:"MessageLength"`
+	ReverseDomain         bool               `yaml:"reverseDomain" json:"-"`
+	Data                  []byte             `yaml:"-" json:"Data"`
+	Payload               []byte             `yaml:"-" json:"Payload"`
+	Options               []layers.TCPOption `yaml:"-" json:"Options"`
+	CorruptChecksum       bool               `yaml:"corruptChecksum" json:"-"`
+	Flags                 TCPFlags           `yaml:"flags" json:"Flags"`
 }
 type TCPFlags struct {
-	SYN bool `yaml:"syn"`
-	ACK bool `yaml:"ack"`
-	PSH bool `yaml:"psh"`
-	FIN bool `yaml:"fin"`
-	RST bool `yaml:"rst"`
-	URG bool `yaml:"urg"`
-	ECE bool `yaml:"ece"`
+	SYN bool `yaml:"syn" json:"SYN"`
+	ACK bool `yaml:"ack" json:"ACK"`
+	PSH bool `yaml:"psh" json:"PSH"`
+	FIN bool `yaml:"fin" json:"FIN"`
+	RST bool `yaml:"rst" json:"RST"`
+	URG bool `yaml:"urg" json:"URG"`
+	ECE bool `yaml:"ece" json:"ECE"`
 }
 
 type TCPOptions struct {
-	TCPOptionType   uint8  `yaml:"tcpOptionType"`
-	TCPOptionLength uint8  `yaml:"tcpOptionLength"`
-	TCPOptionData   string `yaml:"tcpOptionData"`
+	TCPOptionType   uint8  `yaml:"tcpOptionType" json:"TCPOptionType"`
+	TCPOptionLength uint8  `yaml:"tcpOptionLength" json:"TCPOptionLength"`
+	TCPOptionData   string `yaml:"tcpOptionData" json:"TCPOptionData"`
 }
 
 type TCPLayer struct {
@@ -93,6 +95,46 @@ func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	return nil
+}
+
+func (tcp TCPConfig) MarshalJSON() ([]byte, error) {
+	// Define an alias type to avoid infinite recursion when calling json.Marshal inside MarshalJSON.
+	type Alias TCPConfig
+
+	// Convert the byte slice to string for JSON output.
+	// Everything else can marshal normally via the Alias.
+	return json.Marshal(&struct {
+		Alias
+		Data string `json:"Data"`
+		// Payload string `json:"Payload"`
+	}{
+		Alias: Alias(tcp),
+		Data:  string(tcp.Data),
+		// Payload: string(tcp.Payload),
+	})
+}
+
+func ParseTCPLayer(tcp *layers.TCP) TCPConfig {
+	return TCPConfig{
+		SrcPort:       tcp.SrcPort,
+		DstPort:       tcp.DstPort,
+		Window:        tcp.Window,
+		Urgent:        tcp.Urgent,
+		Seq:           tcp.Seq,
+		Ack:           tcp.Ack,
+		MessageOffset: int(tcp.DataOffset),
+		Data:          tcp.Payload,
+		Options:       tcp.Options,
+		Flags: TCPFlags{
+			SYN: tcp.SYN,
+			ACK: tcp.ACK,
+			PSH: tcp.PSH,
+			FIN: tcp.FIN,
+			RST: tcp.RST,
+			URG: tcp.URG,
+			ECE: tcp.ECE,
+		},
+	}
 }
 
 func New(config *TCPConfig) *TCPLayer {

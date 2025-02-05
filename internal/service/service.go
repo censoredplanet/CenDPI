@@ -6,9 +6,10 @@ import (
 	"math/rand/v2"
 	"net"
 	"strings"
-	"unicode"
-	"time"
 	"sync"
+	"time"
+	"unicode"
+
 	"github.com/censoredplanet/CenDPI/internal/assembler"
 	"github.com/censoredplanet/CenDPI/internal/ethernet"
 	"github.com/censoredplanet/CenDPI/internal/http"
@@ -16,13 +17,15 @@ import (
 	"github.com/censoredplanet/CenDPI/internal/netcap"
 	"github.com/censoredplanet/CenDPI/internal/tcp"
 	"github.com/censoredplanet/CenDPI/internal/tls"
+	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
+	"github.com/gopacket/gopacket/tcpassembly"
 	"gopkg.in/yaml.v3"
 )
 
 // Each service corresponds to one measurement (i.e., one TCP connection)
 type ServiceConfig struct {
-	Name	  string
+	Name      string
 	Iface     string
 	PcapPath  string
 	BPF       string
@@ -42,12 +45,12 @@ type ServiceConfig struct {
 type ServiceMessage struct {
 	HTTP                *http.HTTPConfig `yaml:"http"`
 	TLS                 *tls.TLSConfig   `yaml:"tls"`
-	DomainAllCaps 		bool 			 `yaml:"domainAllCaps"`
-	DomainRandomCase 	bool 			 `yaml:"domainRandomCase"`
-	DomainPrependStar 	bool 			 `yaml:"domainPrependStar"`
-	DomainAppendStar 	bool 			 `yaml:"domainAppendStar"`
-	DomainPrependSpace 	bool 			 `yaml:"domainPrependSpace"`
-	DomainAppendSpace 	bool 			 `yaml:"domainAppendSpace"`
+	DomainAllCaps       bool             `yaml:"domainAllCaps"`
+	DomainRandomCase    bool             `yaml:"domainRandomCase"`
+	DomainPrependStar   bool             `yaml:"domainPrependStar"`
+	DomainAppendStar    bool             `yaml:"domainAppendStar"`
+	DomainPrependSpace  bool             `yaml:"domainPrependSpace"`
+	DomainAppendSpace   bool             `yaml:"domainAppendSpace"`
 	PayloadBytes        []byte           // built with the original domain
 	ReversePayloadBytes []byte           // built with the reversed domain
 }
@@ -60,13 +63,13 @@ type ServicePacket struct {
 }
 
 type Target struct {
-	TargetIP   string `json:"TargetIP"`
-	TargetPort uint16 `json:"TargetPort"`
-	SourcePort uint16 `json:"SourcePort"`
-	TestDomain string `json:"TestDomain"`
+	TargetIP      string `json:"TargetIP"`
+	TargetPort    uint16 `json:"TargetPort"`
+	SourcePort    uint16 `json:"SourcePort"`
+	TestDomain    string `json:"TestDomain"`
 	ControlDomain string `json:"ControlDomain"`
-	Protocol   string `json:"Protocol"` // e.g. "http" or "https"
-	Label      string `json:"Label"`
+	Protocol      string `json:"Protocol"` // e.g. "http" or "https"
+	Label         string `json:"Label"`
 }
 
 type tcpState struct {
@@ -79,15 +82,15 @@ type tcpState struct {
 var tcpStates sync.Map // key=FlowKey, value=tcpState
 
 func loadTCPState(key netcap.FlowKey) (tcpState, bool) {
-    value, ok := tcpStates.Load(key)
-    if !ok {
-        return tcpState{}, false
-    }
-    return value.(tcpState), true
+	value, ok := tcpStates.Load(key)
+	if !ok {
+		return tcpState{}, false
+	}
+	return value.(tcpState), true
 }
 
 func storeTCPState(key netcap.FlowKey, st tcpState) {
-    tcpStates.Store(key, st)
+	tcpStates.Store(key, st)
 }
 
 func (s *ServiceConfig) UnmarshalYAML(node *yaml.Node) error {
@@ -107,7 +110,7 @@ func (s *ServiceConfig) UnmarshalYAML(node *yaml.Node) error {
 	default:
 		return fmt.Errorf("invalid protocol field: %s, specified in probe yaml configration file", raw.base.Protocol)
 	}
-	
+
 	*s = ServiceConfig(raw.base)
 
 	return nil
@@ -120,14 +123,21 @@ func wrapError(err *error, str string, args ...any) {
 	}
 }
 
-func collectPackets(packetCh <-chan netcap.PacketInfo, duration time.Duration, flowKey netcap.FlowKey) {
+func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, duration time.Duration, flowKey netcap.FlowKey) netcap.Result {
 	timer := time.NewTimer(duration)
+	var savePacket struct {
+		netcap.FlowKey
+		Packets []gopacket.Packet
+	}
+	savePacket.FlowKey = flowKey
+	var result netcap.Result
+	var hasHTTP bool
+	var hasTLS bool
 	defer timer.Stop()
 	for {
 		select {
 		case packet := <-packetCh:
-
-			// ensure that the packet is part of the flow we are interested in
+			savePacket.Packets = append(savePacket.Packets, packet.Data)
 			packetFlowKey := netcap.NormalizeFlowKey(packet.SrcIP, packet.SrcPort, packet.DstIP, packet.DstPort)
 			if packetFlowKey != flowKey {
 				log.Printf("packet received not belonging to the current flow: %v\n", packetFlowKey)
@@ -138,12 +148,22 @@ func collectPackets(packetCh <-chan netcap.PacketInfo, duration time.Duration, f
 			tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
 			if tcpLayer != nil {
 				t := tcpLayer.(*layers.TCP)
+				if t.SrcPort == 80 {
+					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
+						hasHTTP = true
+					}
+				}
+				if t.SrcPort == 443 {
+					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
+						hasTLS = true
+					}
+				}
 				//states := tcpStates[flowKey]
 				states, ok := loadTCPState(flowKey)
 				if !ok {
 					log.Printf("collectPackets: no TCP state found for flow %v\n", flowKey)
 					// TODO: perhaps we should panic() instead?
-					return
+					return netcap.Result{}
 				}
 
 				// Calculate how much to increment Ack
@@ -164,31 +184,69 @@ func collectPackets(packetCh <-chan netcap.PacketInfo, duration time.Duration, f
 				}
 
 				//tcpStates[flowKey] = tcpState{
-					//SeqNum:     states.SeqNum,
-					//AckNum:     states.AckNum,
-					//InitialSeq: states.InitialSeq,
+				//SeqNum:     states.SeqNum,
+				//AckNum:     states.AckNum,
+				//InitialSeq: states.InitialSeq,
 				//}
 				storeTCPState(flowKey, tcpState{
 					SeqNum:     states.SeqNum,
 					AckNum:     states.AckNum,
 					InitialSeq: states.InitialSeq,
 				})
+				// Call to parse packets
+				result.Packets = append(result.Packets, netCap.ParseResults(packet.Data))
 			}
 
 		case <-timer.C:
-			return
+			if netCap.Config.SavePcap {
+				if _, ok := netCap.PcapWriters[savePacket.FlowKey]; !ok {
+					log.Fatalf("FlowKey %v does not exist in the pcapWriters", savePacket.FlowKey)
+				}
+				writer := netCap.PcapWriters[savePacket.FlowKey]
+				for _, packet := range savePacket.Packets {
+					netCap.WritePacketToPCAP(writer, packet.Data(), packet.Metadata().Timestamp)
+				}
+			}
+			if hasHTTP {
+				factory := http.NewHttpStreamFactory()
+				assembler := tcpassembly.NewAssembler(tcpassembly.NewStreamPool(factory))
+				assembler.AssemblerOptions.MaxBufferedPagesTotal = 100000
+				assembler.AssemblerOptions.MaxBufferedPagesPerConnection = 100
+				for _, packet := range savePacket.Packets {
+					if tcp := packet.TransportLayer().(*layers.TCP); tcp != nil {
+						assembler.AssembleWithTimestamp(
+							packet.NetworkLayer().NetworkFlow(),
+							tcp,
+							packet.Metadata().Timestamp,
+						)
+					}
+				}
+				assembler.FlushAll()
+				select {
+				case resp := <-factory.Responses:
+					result.HTTPResponses = append(result.HTTPResponses, *resp)
+					return result
+				case <-time.After(3 * time.Second):
+					return result
+				}
+			}
+			if hasTLS {
+				result.ServerHello = tls.ParseServerHello(savePacket.Packets)
+			}
+
+			return result
 		}
 	}
 }
 
-func sendAndCollect(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey netcap.FlowKey) error {
+func sendAndCollect(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey netcap.FlowKey) (netcap.Result, error) {
 	if err := netCap.SendPacket(pkt, flowKey); err != nil {
-		return err
+		return netcap.Result{}, err
 	}
 	if delay > 0 {
-		collectPackets(packetCh, delay, flowKey)
+		return collectPackets(netCap, packetCh, delay, flowKey), nil
 	}
-	return nil
+	return netcap.Result{}, nil
 }
 
 func buildSingleMessage(cfg ServiceConfig, domain string) ([]byte, error) {
@@ -251,42 +309,43 @@ func buildMessages(cfg ServiceConfig) ([]byte, []byte, error) {
 }
 
 func randomCase(s string) string {
-    var b strings.Builder
-    for _, r := range s {
-        if rand.IntN(2) == 0 {
-            b.WriteRune(unicode.ToLower(r))
-        } else {
-            b.WriteRune(unicode.ToUpper(r))
-        }
-    }
-    return b.String()
+	var b strings.Builder
+	for _, r := range s {
+		if rand.IntN(2) == 0 {
+			b.WriteRune(unicode.ToLower(r))
+		} else {
+			b.WriteRune(unicode.ToUpper(r))
+		}
+	}
+	return b.String()
 }
 
-func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target Target, packetCh <-chan netcap.PacketInfo) {
+func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target Target, packetCh <-chan netcap.PacketInfo) netcap.Result {
 	var err error
 	defer wrapError(&err, "CenDPI")
+	var results netcap.Result
 
 	probe.Domain = target.TestDomain
 	if probe.IsControl {
 		probe.Domain = target.ControlDomain
 	}
 	if probe.Message.DomainAllCaps {
-        probe.Domain = strings.ToUpper(probe.Domain)
-    } else if probe.Message.DomainRandomCase {
-        probe.Domain = randomCase(probe.Domain)
-    }
+		probe.Domain = strings.ToUpper(probe.Domain)
+	} else if probe.Message.DomainRandomCase {
+		probe.Domain = randomCase(probe.Domain)
+	}
 	if probe.Message.DomainPrependStar {
-        probe.Domain = "*****" + probe.Domain
-    }
-    if probe.Message.DomainAppendStar {
-        probe.Domain = probe.Domain + "*****"
-    }
+		probe.Domain = "*****" + probe.Domain
+	}
+	if probe.Message.DomainAppendStar {
+		probe.Domain = probe.Domain + "*****"
+	}
 	if probe.Message.DomainPrependSpace {
-        probe.Domain = "     " + probe.Domain
-    }
-    if probe.Message.DomainAppendSpace {
-        probe.Domain = probe.Domain + "     "
-    }
+		probe.Domain = "     " + probe.Domain
+	}
+	if probe.Message.DomainAppendSpace {
+		probe.Domain = probe.Domain + "     "
+	}
 
 	dstIP := net.ParseIP(target.TargetIP)
 	dstPort := layers.TCPPort(target.TargetPort)
@@ -294,7 +353,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	probe.DstPort = dstPort
 	probe.DstIP = dstIP
 	probe.Label = target.Label
-	
+
+	results.Control = probe.IsControl
+	results.Domain = probe.Domain
+	results.Probe = probe.Name
+
 	flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, probe.DstIP, probe.DstPort)
 	probe.Flowkey = flowKey
 	for n, p := range probe.Packets {
@@ -304,11 +367,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			if ok {
 				log.Printf("packet %d: TCP state already exists for flow %v\n", n, flowKey)
 				break
-    		}
+			}
 			//tcpStates[flowKey] = tcpState{
-				//SeqNum:     initSeq,
-				//AckNum:     0,
-				//InitialSeq: initSeq,
+			//SeqNum:     initSeq,
+			//AckNum:     0,
+			//InitialSeq: initSeq,
 			//}
 			storeTCPState(flowKey, tcpState{
 				SeqNum:     initSeq,
@@ -328,7 +391,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			if !ok {
 				log.Printf("packet %d: no TCP state found for flow %v\n", n, flowKey)
 				break
-    		}
+			}
 			p.TCP.Seq, p.TCP.Ack = state.SeqNum, state.AckNum
 			curIsq := state.InitialSeq
 
@@ -344,7 +407,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			if p.TCP.SeqRelativeToInitial != 0 {
 				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
 			}
-			
+
 			// If we have a "MessageLength" in the config, it means we want to slice
 			// from the overall application message.
 			if p.TCP.MessageLength != 0 {
@@ -373,8 +436,8 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				padLen := 0
 				if messageOffsetBytes < 0 {
 					padLen = -messageOffsetBytes
-                    messageOffsetBytes = 0
-                }
+					messageOffsetBytes = 0
+				}
 				var length int
 				if p.TCP.MessageLength == -1 {
 					// take entire remainder
@@ -415,10 +478,20 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				log.Printf("packet %d: Assembler Build error: %v\n", n, err)
 				break
 			}
+			results.Packets = append(results.Packets, netcap.ResultPacket{
+				IP:  p.IP,
+				TCP: *p.TCP,
+			})
 
-			if err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
+			if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
 				log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
 				break
+			} else {
+				results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
+				results.Packets = append(results.Packets, result.Packets...)
+				if result.ServerHello != nil {
+					results.ServerHello = result.ServerHello
+				}
 			}
 
 		} else {
@@ -442,7 +515,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					if !ok {
 						log.Printf("packet %d: no TCP state found for flow %v\n", n, flowKey)
 						break
-    				}
+					}
 					tcpWrap := &tcp.TCPConfig{
 						SrcPort: probe.SrcPort,
 						DstPort: probe.DstPort,
@@ -509,10 +582,20 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					log.Printf("packet %d: Assembler Build error: %v\n", n, err)
 					break
 				}
+				results.Packets = append(results.Packets, netcap.ResultPacket{
+					IP:  p.IP,
+					TCP: *p.TCP,
+				})
 
-				if err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
+				if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
 					log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
 					break
+				} else {
+					results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
+					results.Packets = append(results.Packets, result.Packets...)
+					if result.ServerHello != nil {
+						results.ServerHello = result.ServerHello
+					}
 				}
 
 			} else {
@@ -522,4 +605,5 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			}
 		}
 	}
+	return results
 }

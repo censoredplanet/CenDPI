@@ -1,8 +1,16 @@
 package http
 
 import (
+	"bufio"
+	"io"
+	"log"
+	"net/http"
 	"strings"
+	"time"
 
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/tcpassembly"
+	"github.com/gopacket/gopacket/tcpassembly/tcpreader"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,10 +34,18 @@ const padding = "8d99a4b0f28d35fc3d18a5a655f2948969acd4210ded118bd7e7797ee3bfd91
 	"4a0883b0350cce3d03a63d268af5454421f43780b7596c6131f7e7a3e9e0cb29288bf80963"
 
 type HTTPConfig struct {
-	Request            string `yaml:"request"`
-	Domain             string
-	Padding            bool `yaml:"padding"`
-	LongPadding		   bool `yaml:"longPadding"`
+	Request     string `yaml:"request"`
+	Domain      string
+	Padding     bool `yaml:"padding"`
+	LongPadding bool `yaml:"longPadding"`
+}
+
+type Response struct {
+	Status     string            `json:"status"`
+	StatusCode int               `json:"status_code"`
+	Protocol   string            `json:"protocol"`
+	Headers    map[string]string `json:"headers"`
+	Body       string            `json:"body"`
 }
 
 func (h *HTTPConfig) UnmarshalYAML(node *yaml.Node) error {
@@ -49,7 +65,6 @@ func (h *HTTPConfig) UnmarshalYAML(node *yaml.Node) error {
 
 func BuildHTTPRequest(cfg *HTTPConfig) ([]byte, error) {
 	hostDomain := cfg.Domain
-	
 	// replace ${} with cfg.Domain
 	request := cfg.Request
 	request = strings.Replace(request, "${}", hostDomain, 1)
@@ -61,4 +76,72 @@ func BuildHTTPRequest(cfg *HTTPConfig) ([]byte, error) {
 	}
 
 	return []byte(request), nil
+}
+
+type HttpStreamFactory struct {
+	Responses chan *Response
+}
+
+type httpStream struct {
+	net, transport gopacket.Flow
+	reader         tcpreader.ReaderStream
+	Responses      chan *Response
+}
+
+func NewHttpStreamFactory() *HttpStreamFactory {
+	return &HttpStreamFactory{
+		Responses: make(chan *Response, 1),
+	}
+}
+
+func (h *HttpStreamFactory) New(net, transport gopacket.Flow) tcpassembly.Stream {
+	hStream := &httpStream{
+		net:       net,
+		transport: transport,
+		reader:    tcpreader.NewReaderStream(),
+		Responses: h.Responses,
+	}
+
+	go hStream.readResponse()
+	return &hStream.reader
+}
+
+func (h *httpStream) readResponse() {
+	defer h.reader.Close()
+	timer := time.NewTimer(2 * time.Second)
+	buf := bufio.NewReader(&h.reader)
+	for {
+		select {
+		case <-timer.C:
+			return
+		default:
+			resp, err := http.ReadResponse(buf, nil)
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				return
+			}
+
+			headers := make(map[string]string)
+			for key, values := range resp.Header {
+				headers[key] = strings.Join(values, ", ")
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("Error reading body: %v", err)
+			}
+
+			resp.Body.Close()
+
+			h.Responses <- &Response{
+				Headers:    headers,
+				Status:     resp.Status,
+				Protocol:   resp.Proto,
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
+		}
+	}
 }

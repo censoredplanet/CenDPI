@@ -12,25 +12,25 @@ import (
 )
 
 type IPConfig struct {
-	SrcIP                net.IP
-	DstIP                net.IP
-	Version              uint8
-	IHL                  uint8
-	TOS                  uint8               `yaml:"tos"`
-	Id                   uint16              `yaml:"id"`
-	Protocol             layers.IPProtocol   `yaml:"-"`
-	TTL                  uint8               `yaml:"ttl"`
-	Options              []layers.IPv4Option `yaml:"-"`
-	Padding              []byte
-	FragmentOffset       int  `yaml:"fragmentOffset"`
-	MessageOffset        int  `yaml:"messageOffset"`
-	MessageLength        int  `yaml:"messageLength"`
-	ReverseDomain        bool `yaml:"reverseDomain"`
-	MoreFragments        bool `yaml:"moreFragments"`
-	DontFragment         bool `yaml:"dontFragment"`
-	EvilBit              bool `yaml:"evilBit"`
-	RawPayload           []byte
-	FragmentationEnabled bool
+	SrcIP                net.IP              `json:"SrcIP"`
+	DstIP                net.IP              `json:"DstIP"`
+	Version              uint8               `json:"Version"`
+	IHL                  uint8               `json:"IHL"`
+	TOS                  uint8               `yaml:"tos" json:"TOS"`
+	Id                   uint16              `yaml:"id" json:"ID"`
+	Protocol             layers.IPProtocol   `yaml:"-" json:"Protocol"`
+	TTL                  uint8               `yaml:"ttl" json:"TTL"`
+	Options              []layers.IPv4Option `yaml:"-" json:"Options"`
+	Padding              []byte              `json:"Padding"`
+	FragmentOffset       int                 `yaml:"fragmentOffset" json:"FragmentOffset"`
+	MessageOffset        int                 `yaml:"messageOffset" json:"MessageOffset"`
+	MessageLength        int                 `yaml:"messageLength" json:"MessageLength"`
+	ReverseDomain        bool                `yaml:"reverseDomain" json:"-"`
+	MoreFragments        bool                `yaml:"moreFragments" json:"MoreFragments"`
+	DontFragment         bool                `yaml:"dontFragment" json:"DontFragment"`
+	EvilBit              bool                `yaml:"evilBit" json:"EvilBit"`
+	RawPayload           []byte              `json:"-"`
+	FragmentationEnabled bool                `json:"-"`
 }
 
 type IPLayer struct {
@@ -88,6 +88,26 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	return nil
+}
+
+func ParseIPv4Layer(ip4 *layers.IPv4) IPConfig {
+	return IPConfig{
+		SrcIP:          ip4.SrcIP,
+		DstIP:          ip4.DstIP,
+		Version:        ip4.Version,
+		IHL:            ip4.IHL,
+		TOS:            ip4.TOS,
+		Id:             ip4.Id,
+		Protocol:       ip4.Protocol,
+		TTL:            ip4.TTL,
+		Options:        ip4.Options,
+		Padding:        ip4.Padding,
+		FragmentOffset: int(ip4.FragOffset),
+		MoreFragments:  ip4.Flags&layers.IPv4MoreFragments != 0,
+		DontFragment:   ip4.Flags&layers.IPv4DontFragment != 0,
+		EvilBit:        ip4.Flags&layers.IPv4EvilBit != 0,
+		RawPayload:     ip4.Payload,
+	}
 }
 
 func New(config *IPConfig) *IPLayer {

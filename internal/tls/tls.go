@@ -1,12 +1,22 @@
 package tls
 
 import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"log"
 	"strconv"
 	"strings"
 
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/layers"
+	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/hkdf"
 	"gopkg.in/yaml.v3"
 )
 
@@ -548,4 +558,261 @@ func getRecordPayload(rec TLSRecordConfig, clientHello []byte) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unknown PayloadType: %s", rec.PayloadType)
 	}
+}
+
+type ServerHello struct {
+	Length            uint16 `json:"Length"`
+	Random            []byte `json:"Random"`
+	SessionIDLength   uint8  `json:"SessionIDLength"`
+	SessionID         []byte `json:"SessionID"`
+	CipherSuite       string `json:"CipherSuite"`
+	CompressionMethod uint8  `json:"CompressionMethod"`
+	ExtensionsLength  uint16 `json:"ExtensionsLength"`
+	CertificateLength uint16 `json:"CertificateLength"`
+}
+
+const (
+	TLS12Version          = 0x0303
+	TLS13Version          = 0x0304
+	KeyShareExtension     = 0x0033
+	KeyExchangeCurve25519 = 0x001d
+)
+
+var (
+	TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256   = []byte{0xcc, 0xa8}
+	TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 = []byte{0xcc, 0xa9}
+	TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256         = []byte{0xc0, 0x2f}
+	TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384         = []byte{0xc0, 0x30}
+	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256       = []byte{0xc0, 0x2b}
+	TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384       = []byte{0xc0, 0x2c}
+	TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA            = []byte{0xc0, 0x13}
+	TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA          = []byte{0xc0, 0x09}
+	TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA            = []byte{0xc0, 0x14}
+	TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA          = []byte{0xc0, 0x0a}
+	TLS_RSA_WITH_AES_128_GCM_SHA256               = []byte{0x00, 0x9c}
+	TLS_RSA_WITH_AES_256_GCM_SHA384               = []byte{0x00, 0x9d}
+	TLS_RSA_WITH_AES_128_CBC_SHA                  = []byte{0x00, 0x2f}
+	TLS_RSA_WITH_AES_256_CBC_SHA                  = []byte{0x00, 0x35}
+	TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA           = []byte{0xc0, 0x12}
+	TLS_RSA_WITH_3DES_EDE_CBC_SHA                 = []byte{0x00, 0x0a}
+	TLS_AES_256_GCM_SHA384                        = []byte{0x13, 0x02}
+	TLS_AES_128_GCM_SHA256                        = []byte{0x13, 0x01}
+)
+
+func findKeyShare(data []byte) (keyExchangeGroup uint16, publicKey []byte, err error) {
+	currentPos := 0
+	for currentPos < len(data) {
+		// Need at least 4 bytes to read extension type and length
+		if currentPos+4 > len(data) {
+			return 0, nil, fmt.Errorf("incomplete extension header")
+		}
+
+		// Read extension type (2 bytes)
+		extType := binary.BigEndian.Uint16(data[currentPos : currentPos+2])
+		// Read extension length (2 bytes)
+		extLen := binary.BigEndian.Uint16(data[currentPos+2 : currentPos+4])
+
+		// Move past header
+		currentPos += 4
+
+		// Check if this is key share extension (0x0033)
+		if extType == 0x0033 {
+			// Need 4 more bytes for key exchange group and key length
+			if currentPos+4 > len(data) {
+				return 0, nil, fmt.Errorf("incomplete key share data")
+			}
+
+			// Get key exchange group
+			keyExchangeGroup = binary.BigEndian.Uint16(data[currentPos : currentPos+2])
+			// Skip to key length
+			currentPos += 2
+
+			// Get key length
+			keyLen := binary.BigEndian.Uint16(data[currentPos : currentPos+2])
+			currentPos += 2
+
+			// Extract the public key
+			if currentPos+int(keyLen) > len(data) {
+				return 0, nil, fmt.Errorf("incomplete public key data")
+			}
+
+			return keyExchangeGroup, data[currentPos : currentPos+int(keyLen)], nil
+		}
+
+		// Move to next extension
+		currentPos += int(extLen)
+	}
+
+	return 0, nil, fmt.Errorf("key share extension not found")
+}
+
+func ParseServerHello(packets []gopacket.Packet) *ServerHello {
+	var serverHello ServerHello
+	for _, packet := range packets {
+		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+			data := tcpLayer.(*layers.TCP).Payload
+			// log.Println("WTF: ", len(data))
+			// log.Println("First 5 bytes: ", data[:6])
+			// if len(data) > 5 && data[5] == 2 && data[0] == 22 {
+			// 	log.Println("Check: len of payload: ", len(data))
+			// }
+			if len(data) > 81 && data[5] == 2 && data[0] == 22 {
+				// data = data[3:]
+				serverHello.Length = binary.BigEndian.Uint16(data[3:5])
+				// Random starts at index 11 (3 + 8)
+				serverHello.Random = data[11:43]
+				// SessionID starts at index 43
+				serverHello.SessionIDLength = data[43]
+				serverHello.SessionID = data[44:76]
+				// Cipher suite starts at index 76
+				switch {
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+				case bytes.Equal(data[76:78], TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256):
+					serverHello.CipherSuite = "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+				case bytes.Equal(data[76:78], TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256):
+					serverHello.CipherSuite = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+				case bytes.Equal(data[76:78], TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384):
+					serverHello.CipherSuite = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA):
+					serverHello.CipherSuite = "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA):
+					serverHello.CipherSuite = "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_RSA_WITH_AES_128_GCM_SHA256):
+					serverHello.CipherSuite = "TLS_RSA_WITH_AES_128_GCM_SHA256"
+				case bytes.Equal(data[76:78], TLS_RSA_WITH_AES_256_GCM_SHA384):
+					serverHello.CipherSuite = "TLS_RSA_WITH_AES_256_GCM_SHA384"
+				case bytes.Equal(data[76:78], TLS_RSA_WITH_AES_128_CBC_SHA):
+					serverHello.CipherSuite = "TLS_RSA_WITH_AES_128_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_RSA_WITH_AES_256_CBC_SHA):
+					serverHello.CipherSuite = "TLS_RSA_WITH_AES_256_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA):
+					serverHello.CipherSuite = "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_RSA_WITH_3DES_EDE_CBC_SHA):
+					serverHello.CipherSuite = "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+				case bytes.Equal(data[76:78], TLS_AES_256_GCM_SHA384):
+					serverHello.CipherSuite = "TLS_AES_256_GCM_SHA384"
+				case bytes.Equal(data[76:78], TLS_AES_128_GCM_SHA256):
+					serverHello.CipherSuite = "TLS_AES_128_GCM_SHA256"
+				default:
+					fmt.Printf("Unknown cipher suite: %x\n", data[76:78])
+				}
+				// Compression method and extensions length start at index 78
+				serverHello.CompressionMethod = data[78]
+				serverHello.ExtensionsLength = binary.BigEndian.Uint16(data[79:81])
+
+				// For now, if the server certificates tls record header does not fit into a single tcp packet we wont be able to find it
+				// We would need to refragement the tls message
+				data = data[int(serverHello.Length)+5:]
+				var foundEncryptedExtensions bool
+				i := 0
+				for i < len(data) {
+					if data[i] == 20 {
+						i += 6
+						continue
+					}
+					if data[i] == 23 && !foundEncryptedExtensions {
+						foundEncryptedExtensions = true
+						if i+5 < len(data) {
+							skip := binary.BigEndian.Uint16(data[i+3 : i+5])
+							i += int(skip) + 5
+							continue
+						}
+					}
+					if data[i] == 23 && foundEncryptedExtensions {
+						if i+5 < len(data) {
+							serverHello.CertificateLength = binary.BigEndian.Uint16(data[i+3 : i+5])
+							break
+						}
+					}
+				}
+				return &serverHello
+			}
+
+		}
+	}
+	return nil
+}
+
+func hkdfExpandLabel(secret []byte, label string, context []byte, length int) []byte {
+	// TLS 1.3 specific label prefix
+	labelPrefix := "tls13 "
+
+	// Construct HKDF label
+	hkdfLabel := make([]byte, 0, 4+len(labelPrefix)+len(label)+len(context))
+	hkdfLabel = append(hkdfLabel, byte(length>>8), byte(length))
+	hkdfLabel = append(hkdfLabel, byte(len(labelPrefix)+len(label)))
+	hkdfLabel = append(hkdfLabel, labelPrefix...)
+	hkdfLabel = append(hkdfLabel, label...)
+	hkdfLabel = append(hkdfLabel, byte(len(context)))
+	hkdfLabel = append(hkdfLabel, context...)
+
+	// Create HKDF reader
+	h := sha256.New
+	hkdf := hkdf.Expand(h, secret, hkdfLabel)
+
+	// Read derived key material
+	output := make([]byte, length)
+	if _, err := io.ReadFull(hkdf, output); err != nil {
+		panic(err)
+	}
+
+	return output
+}
+
+func DecryptTLSMessage(serverPublicKey []byte, clientHelloBytes []byte, serverHelloBytes []byte, encryptedCert []byte) {
+	x25519Key, err := hex.DecodeString(keyshareHex)
+	if err != nil {
+		log.Println("hex.DecodeString(keyshareHex) failed: ", err)
+	}
+	sharedSecret, err := curve25519.X25519(x25519Key, serverPublicKey)
+	if err != nil {
+		log.Println("Decrypting failed: ", err)
+	}
+
+	zeroKey := make([]byte, 32) // 32 zero bytes
+	zeros := make([]byte, 32)   // another 32 zero bytes
+	h := sha256.New
+	earlySecret := hkdf.Extract(h, zeroKey, zeros)
+	derivedSecret := hkdfExpandLabel(earlySecret, "derived", []byte{}, sha256.Size)
+	handshakeSecret := hkdf.Extract(h, sharedSecret, derivedSecret)
+	transcriptHash := sha256.Sum256(append(clientHelloBytes, serverHelloBytes...))
+	serverHandshakeTrafficSecret := hkdfExpandLabel(handshakeSecret, "s hs traffic", transcriptHash[:], sha256.Size)
+	key := hkdfExpandLabel(serverHandshakeTrafficSecret, "key", []byte{}, 16)
+	iv := hkdfExpandLabel(serverHandshakeTrafficSecret, "iv", []byte{}, 12)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		log.Println("failed to create cipher: %w", err)
+	}
+
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Println("failed to create GCM: ", err)
+	}
+
+	// For each encrypted record:
+	nonce := make([]byte, 12)
+	copy(nonce, iv)
+	// Use sequence number (0 for first record) in last 8 bytes
+	binary.BigEndian.PutUint64(nonce[4:], uint64(0))
+
+	// Record header (5 bytes) is additional data
+	additionalData := encryptedCert[:5]
+	// Encrypted portion starts after header
+	ciphertext := encryptedCert[5:]
+
+	_, err = aead.Open(nil, nonce, ciphertext, additionalData)
+	if err != nil {
+		log.Println("aead.Open failed: %w", err)
+	}
+
 }
