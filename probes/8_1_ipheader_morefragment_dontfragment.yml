@@ -53,7 +53,7 @@ packets:
       moreFragments: true
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 24
+      messageLength: 48
       reverseDomain: false
 
   - ethernet:
@@ -63,8 +63,8 @@ packets:
       id: 33347
       dontFragment: true
       moreFragments: false
-      fragmentOffset: 3
-      messageOffset: 24
+      fragmentOffset: 6
+      messageOffset: 48
       messageLength: -1
       reverseDomain: false
     delay: 1

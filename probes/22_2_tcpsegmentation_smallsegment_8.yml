@@ -57,76 +57,6 @@ packets:
       messageOffset: 0
       messageLength: 8
       seqRelativeToInitial: 1
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33348
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 8
-      messageLength: 8
-      seqRelativeToInitial: 9
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33349
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 16
-      messageLength: 8
-      seqRelativeToInitial: 17
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33350
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 24
-      messageLength: 8
-      seqRelativeToInitial: 25
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33351
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 32
-      messageLength: 8
-      seqRelativeToInitial: 33
-
-  - ethernet:
-    ip:
-      tos: 0
-      ttl: 64
-      id: 33353
-    tcp:
-      window: 2056
-      flags:
-        psh: true
-        ack: true
-      messageOffset: 40
-      messageLength: 8
-      seqRelativeToInitial: 41
     delay: 1
 
   - ethernet:
@@ -139,9 +69,9 @@ packets:
       flags:
         psh: true
         ack: true
-      messageOffset: 48
+      messageOffset: 8
       messageLength: -1
-      seqRelativeToInitial: 49
+      seqRelativeToInitial: 9
     delay: 1
 
   - ethernet:
