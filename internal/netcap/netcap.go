@@ -75,6 +75,8 @@ type Result struct {
 	Probe         string           `json:"Probe"`
 	Domain        string           `json:"Domain"`
 	Control       bool             `json:"Control"`
+	TargetIP      string           `json:"TargetIP"`
+	TargetPort    int              `json:"TargetPort"`
 	Packets       []ResultPacket   `json:"Packets"`
 	HTTPResponses []http.Response  `json:"HTTPResponses"`
 	ServerHello   *tls.ServerHello `json:"ServerHello"`
@@ -82,6 +84,7 @@ type Result struct {
 
 type ResultPacket struct {
 	SequenceNumber int           `json:"SequenceNum"`
+	Incoming       bool          `json:"Incoming"`
 	IP             ip.IPConfig   `json:"IP"`
 	TCP            tcp.TCPConfig `json:"TCP"`
 }
@@ -283,11 +286,12 @@ func (n *NetCap) ParseResults(packet gopacket.Packet) ResultPacket {
 	var result ResultPacket
 	if ip4Layer := packet.Layer(layers.LayerTypeIPv4); ip4Layer != nil {
 		result.IP = ip.ParseIPv4Layer(ip4Layer.(*layers.IPv4))
+		result.IP.RawPayload = nil
 	}
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		result.TCP = tcp.ParseTCPLayer(tcpLayer.(*layers.TCP))
 	}
-
+	result.Incoming = true
 	return result
 }
 

@@ -29,7 +29,7 @@ type IPConfig struct {
 	MoreFragments        bool                `yaml:"moreFragments" json:"MoreFragments"`
 	DontFragment         bool                `yaml:"dontFragment" json:"DontFragment"`
 	EvilBit              bool                `yaml:"evilBit" json:"EvilBit"`
-	RawPayload           []byte              `json:"-"`
+	RawPayload           []byte              `json:"RawPayload"`
 	FragmentationEnabled bool                `json:"-"`
 }
 

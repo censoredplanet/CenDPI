@@ -158,7 +158,6 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 						hasTLS = true
 					}
 				}
-				//states := tcpStates[flowKey]
 				states, ok := loadTCPState(flowKey)
 				if !ok {
 					log.Printf("collectPackets: no TCP state found for flow %v\n", flowKey)
@@ -183,11 +182,6 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 					states.AckNum = nextAck
 				}
 
-				//tcpStates[flowKey] = tcpState{
-				//SeqNum:     states.SeqNum,
-				//AckNum:     states.AckNum,
-				//InitialSeq: states.InitialSeq,
-				//}
 				storeTCPState(flowKey, tcpState{
 					SeqNum:     states.SeqNum,
 					AckNum:     states.AckNum,
@@ -357,6 +351,8 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	results.Control = probe.IsControl
 	results.Domain = probe.Domain
 	results.Probe = probe.Name
+	results.TargetIP = probe.DstIP.String()
+	results.TargetPort = int(probe.DstPort)
 
 	flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, probe.DstIP, probe.DstPort)
 	probe.Flowkey = flowKey
@@ -479,8 +475,9 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				break
 			}
 			results.Packets = append(results.Packets, netcap.ResultPacket{
-				IP:  p.IP,
-				TCP: *p.TCP,
+				Incoming: false,
+				IP:       p.IP,
+				TCP:      *p.TCP,
 			})
 
 			if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
@@ -582,9 +579,29 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					log.Printf("packet %d: Assembler Build error: %v\n", n, err)
 					break
 				}
+
+				ipLayerWithFragmentPayload := ip.IPConfig{
+					SrcIP:          p.IP.SrcIP,
+					DstIP:          p.IP.DstIP,
+					Version:        p.IP.Version,
+					IHL:            p.IP.IHL,
+					TOS:            p.IP.TOS,
+					Id:             p.IP.Id,
+					Protocol:       p.IP.Protocol,
+					TTL:            p.IP.TTL,
+					Options:        p.IP.Options,
+					Padding:        p.IP.Padding,
+					FragmentOffset: p.IP.FragmentOffset,
+					MoreFragments:  p.IP.MoreFragments,
+					DontFragment:   p.IP.DontFragment,
+					EvilBit:        p.IP.EvilBit,
+					RawPayload:     fragmentPayload,
+				}
+
 				results.Packets = append(results.Packets, netcap.ResultPacket{
-					IP:  p.IP,
-					TCP: *p.TCP,
+					Incoming: false,
+					IP:       ipLayerWithFragmentPayload,
+					// TCP: *p.TCP,
 				})
 
 				if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
