@@ -306,7 +306,6 @@ func (n *NetCap) SaveResults(ctx context.Context, filePath string, pktChan chan 
 	}
 	defer file.Close()
 	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "    ")
 	encoder.SetEscapeHTML(false)
 
 	for {
