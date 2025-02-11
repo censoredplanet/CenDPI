@@ -25,7 +25,7 @@ type IPConfig struct {
 	FragmentOffset       int                 `yaml:"fragmentOffset" json:"FragmentOffset"`
 	MessageOffset        int                 `yaml:"messageOffset" json:"MessageOffset"`
 	MessageLength        int                 `yaml:"messageLength" json:"MessageLength"`
-	ReverseDomain        bool                `yaml:"reverseDomain" json:"-"`
+	ReverseDomain        bool                `yaml:"reverseDomain" json:"ReverseDomain"`
 	MoreFragments        bool                `yaml:"moreFragments" json:"MoreFragments"`
 	DontFragment         bool                `yaml:"dontFragment" json:"DontFragment"`
 	EvilBit              bool                `yaml:"evilBit" json:"EvilBit"`

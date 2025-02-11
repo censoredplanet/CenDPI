@@ -28,17 +28,17 @@ type TCPConfig struct {
 	Urgent                uint16             `yaml:"urgentPointer" json:"Urgent"`
 	Seq                   uint32             `json:"Seq"`
 	Ack                   uint32             `json:"Ack"`
-	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial" json:"-"`
-	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected" json:"-"`
-	AckRelativeToExpected int                `yaml:"ackRelativeToExpected" json:"-"`
-	ZeroAck               bool               `yaml:"zeroAck" json:"-"`
+	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial" json:"SeqRelativeToInitial"`
+	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected" json:"SeqRelativeToExpected"`
+	AckRelativeToExpected int                `yaml:"ackRelativeToExpected" json:"AckRelativeToExpected"`
+	ZeroAck               bool               `yaml:"zeroAck" json:"ZeroAck"`
 	MessageOffset         int                `yaml:"messageOffset" json:"MassageOffset"`
 	MessageLength         int                `yaml:"messageLength" json:"MessageLength"`
-	ReverseDomain         bool               `yaml:"reverseDomain" json:"-"`
+	ReverseDomain         bool               `yaml:"reverseDomain" json:"ReverseDomain"`
 	Data                  []byte             `yaml:"-" json:"Data"`
 	Payload               []byte             `yaml:"-" json:"Payload"`
 	Options               []layers.TCPOption `yaml:"-" json:"Options"`
-	CorruptChecksum       bool               `yaml:"corruptChecksum" json:"-"`
+	CorruptChecksum       bool               `yaml:"corruptChecksum" json:"CorruptChecksum"`
 	Flags                 TCPFlags           `yaml:"flags" json:"Flags"`
 }
 type TCPFlags struct {
