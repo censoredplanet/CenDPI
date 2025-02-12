@@ -35,7 +35,8 @@ type TCPConfig struct {
 	MessageOffset         int                `yaml:"messageOffset" json:"MassageOffset"`
 	MessageLength         int                `yaml:"messageLength" json:"MessageLength"`
 	ReverseDomain         bool               `yaml:"reverseDomain" json:"ReverseDomain"`
-	Data                  []byte             `yaml:"-" json:"Data"`
+	Data                  []byte             `yaml:"-" json:"-"`
+	DataString            string             `yaml:"dataString" json:"DataString"`
 	Payload               []byte             `yaml:"-" json:"Payload"`
 	Options               []layers.TCPOption `yaml:"-" json:"Options"`
 	CorruptChecksum       bool               `yaml:"corruptChecksum" json:"CorruptChecksum"`
@@ -64,8 +65,8 @@ type TCPLayer struct {
 func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 	type base TCPConfig
 	raw := struct {
-		base    `yaml:",inline"`
-		Data    string       `yaml:"data"`
+		base `yaml:",inline"`
+		//Data    string       `yaml:"data"`
 		Options []TCPOptions `yaml:"tcpOptions"`
 	}{}
 
@@ -74,11 +75,6 @@ func (t *TCPConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	*t = TCPConfig(raw.base)
-	tcpData, err := hex.DecodeString(raw.Data)
-	if err != nil {
-		return fmt.Errorf("invalid hex in TCP data: '%s'", raw.Data)
-	}
-	t.Data = []byte(tcpData)
 	var tcpOpts layers.TCPOption
 	for _, opt := range raw.Options {
 		if opt.TCPOptionData != "" {
@@ -105,11 +101,11 @@ func (tcp TCPConfig) MarshalJSON() ([]byte, error) {
 	// Everything else can marshal normally via the Alias.
 	return json.Marshal(&struct {
 		Alias
-		Data string `json:"Data"`
+		DataString string `json:"DataString,omitempty"`
 		// Payload string `json:"Payload"`
 	}{
-		Alias: Alias(tcp),
-		Data:  string(tcp.Data),
+		Alias:      Alias(tcp),
+		DataString: tcp.DataString,
 		// Payload: string(tcp.Payload),
 	})
 }
@@ -162,6 +158,12 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 
 	if len(t.config.Data) > 0 {
 		tcp.Payload = t.config.Data
+	} else if len(t.config.DataString) > 0 {
+		tcpData, err := hex.DecodeString(t.config.DataString)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex in TCP data: '%s'", t.config.DataString)
+		}
+		tcp.Payload = []byte(tcpData)
 	}
 
 	// Add options if they exist
@@ -201,6 +203,12 @@ func BuildAndSerialize(tcpConfig *TCPConfig, srcIP, dstIP net.IP) ([]byte, error
 
 	if len(tcpConfig.Data) > 0 {
 		tcpLayer.Payload = tcpConfig.Data
+	} else if len(tcpConfig.DataString) > 0 {
+		tcpData, err := hex.DecodeString(tcpConfig.DataString)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex in TCP data: '%s'", tcpConfig.DataString)
+		}
+		tcpLayer.Payload = []byte(tcpData)
 	}
 
 	if len(tcpConfig.Options) > 0 {
