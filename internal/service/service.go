@@ -19,7 +19,8 @@ import (
 	"github.com/censoredplanet/CenDPI/internal/tls"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
-	"github.com/gopacket/gopacket/tcpassembly"
+
+	//"github.com/gopacket/gopacket/tcpassembly"
 	"gopkg.in/yaml.v3"
 )
 
@@ -131,8 +132,8 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 	}
 	savePacket.FlowKey = flowKey
 	var result netcap.Result
-	var hasHTTP bool
-	var hasTLS bool
+	//var hasHTTP bool
+	//var hasTLS bool
 	defer timer.Stop()
 	for {
 		select {
@@ -148,7 +149,7 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 			tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
 			if tcpLayer != nil {
 				t := tcpLayer.(*layers.TCP)
-				if t.SrcPort == 80 {
+				/*if t.SrcPort == 80 {
 					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
 						hasHTTP = true
 					}
@@ -157,7 +158,7 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
 						hasTLS = true
 					}
-				}
+				}*/
 				states, ok := loadTCPState(flowKey)
 				if !ok {
 					log.Printf("collectPackets: no TCP state found for flow %v\n", flowKey)
@@ -201,32 +202,34 @@ func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, du
 					netCap.WritePacketToPCAP(writer, packet.Data(), packet.Metadata().Timestamp)
 				}
 			}
-			if hasHTTP {
-				factory := http.NewHttpStreamFactory()
-				assembler := tcpassembly.NewAssembler(tcpassembly.NewStreamPool(factory))
-				assembler.AssemblerOptions.MaxBufferedPagesTotal = 100000
-				assembler.AssemblerOptions.MaxBufferedPagesPerConnection = 100
-				for _, packet := range savePacket.Packets {
-					if tcp := packet.TransportLayer().(*layers.TCP); tcp != nil {
-						assembler.AssembleWithTimestamp(
-							packet.NetworkLayer().NetworkFlow(),
-							tcp,
-							packet.Metadata().Timestamp,
-						)
+			/*
+				if hasHTTP {
+					factory := http.NewHttpStreamFactory()
+					assembler := tcpassembly.NewAssembler(tcpassembly.NewStreamPool(factory))
+					assembler.AssemblerOptions.MaxBufferedPagesTotal = 100000
+					assembler.AssemblerOptions.MaxBufferedPagesPerConnection = 100
+					for _, packet := range savePacket.Packets {
+						if tcp := packet.TransportLayer().(*layers.TCP); tcp != nil {
+							assembler.AssembleWithTimestamp(
+								packet.NetworkLayer().NetworkFlow(),
+								tcp,
+								packet.Metadata().Timestamp,
+							)
+						}
+					}
+					assembler.FlushAll()
+					select {
+					case resp := <-factory.Responses:
+						result.HTTPResponses = append(result.HTTPResponses, *resp)
+						return result
+					case <-time.After(3 * time.Second):
+						return result
 					}
 				}
-				assembler.FlushAll()
-				select {
-				case resp := <-factory.Responses:
-					result.HTTPResponses = append(result.HTTPResponses, *resp)
-					return result
-				case <-time.After(3 * time.Second):
-					return result
+				if hasTLS {
+					result.ServerHello = tls.ParseServerHello(savePacket.Packets)
 				}
-			}
-			if hasTLS {
-				result.ServerHello = tls.ParseServerHello(savePacket.Packets)
-			}
+			*/
 
 			return result
 		}
@@ -476,8 +479,8 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			}
 			results.Packets = append(results.Packets, netcap.ResultPacket{
 				Incoming: false,
-				IP:       p.IP,
-				TCP:      *p.TCP,
+				IP:       netcap.BuildIPv4Log(p.IP),
+				TCP:      netcap.BuildTCPLog(*p.TCP),
 			})
 
 			if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
@@ -600,7 +603,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 
 				results.Packets = append(results.Packets, netcap.ResultPacket{
 					Incoming: false,
-					IP:       ipLayerWithFragmentPayload,
+					IP:       netcap.BuildIPv4Log(ipLayerWithFragmentPayload),
 					// TCP: *p.TCP,
 				})
 

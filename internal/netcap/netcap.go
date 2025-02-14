@@ -83,10 +83,54 @@ type Result struct {
 }
 
 type ResultPacket struct {
-	SequenceNumber int           `json:"SequenceNum"`
-	Incoming       bool          `json:"Incoming"`
-	IP             ip.IPConfig   `json:"IP"`
-	TCP            tcp.TCPConfig `json:"TCP"`
+	SequenceNumber int    `json:"SequenceNum"`
+	Incoming       bool   `json:"Incoming"`
+	IP             IPLog  `json:"IP"`
+	TCP            TCPLog `json:"TCP"`
+}
+
+type TCPLog struct {
+	SrcPort layers.TCPPort     `json:"SrcPort"`
+	DstPort layers.TCPPort     `json:"DstPort"`
+	Window  uint16             `json:"Window"`
+	Seq     uint32             `json:"Seq"`
+	Ack     uint32             `json:"Ack"`
+	Flags   tcp.TCPFlags       `json:"Flags"`
+	Options []layers.TCPOption `json:"Options"`
+	Data    []byte             `json:"Data"`
+}
+
+type IPLog struct {
+	SrcIP   net.IP              `json:"SrcIP"`
+	DstIP   net.IP              `json:"DstIP"`
+	Id      uint16              `json:"ID"`
+	TTL     uint8               `json:"TTL"`
+	Options []layers.IPv4Option `json:"Options"`
+}
+
+func BuildIPv4Log(ip4 ip.IPConfig) IPLog {
+
+	return IPLog{
+		SrcIP:   ip4.SrcIP,
+		DstIP:   ip4.DstIP,
+		Id:      ip4.Id,
+		TTL:     ip4.TTL,
+		Options: ip4.Options,
+	}
+}
+
+func BuildTCPLog(tcp tcp.TCPConfig) TCPLog {
+
+	return TCPLog{
+		SrcPort: tcp.SrcPort,
+		DstPort: tcp.DstPort,
+		Window:  tcp.Window,
+		Seq:     tcp.Seq,
+		Ack:     tcp.Ack,
+		Flags:   tcp.Flags,
+		Options: tcp.Options,
+		Data:    tcp.Data,
+	}
 }
 
 func NormalizeFlowKey(srcIP net.IP, srcPort layers.TCPPort, dstIP net.IP, dstPort layers.TCPPort) FlowKey {
@@ -285,11 +329,12 @@ func (n *NetCap) SetupPCAPWriters(flowKeyToPcap map[FlowKey]NetCapPcapInfo, path
 func (n *NetCap) ParseResults(packet gopacket.Packet) ResultPacket {
 	var result ResultPacket
 	if ip4Layer := packet.Layer(layers.LayerTypeIPv4); ip4Layer != nil {
-		result.IP = ip.ParseIPv4Layer(ip4Layer.(*layers.IPv4))
-		result.IP.RawPayload = nil
+		ipcfg := ip.ParseIPv4Layer(ip4Layer.(*layers.IPv4))
+		result.IP = BuildIPv4Log(ipcfg)
 	}
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-		result.TCP = tcp.ParseTCPLayer(tcpLayer.(*layers.TCP))
+		tcpcfg := tcp.ParseTCPLayer(tcpLayer.(*layers.TCP))
+		result.TCP = BuildTCPLog(tcpcfg)
 	}
 	result.Incoming = true
 	return result

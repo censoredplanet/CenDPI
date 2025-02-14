@@ -64,6 +64,7 @@ packets:
           tcpOptionLength: 3
           tcpOptionData: "06"
       seqRelativeToInitial: -1
+      zeroAck: true
     delay: 1
 
   - ethernet:

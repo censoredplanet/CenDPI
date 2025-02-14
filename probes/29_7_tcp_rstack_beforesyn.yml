@@ -36,6 +36,7 @@ packets:
       window: 65535
       flags:
         syn: true
+      zeroAck: true
       tcpOptions:
         - tcpOptionType: 1
         - tcpOptionType: 1

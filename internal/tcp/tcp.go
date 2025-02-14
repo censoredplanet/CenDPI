@@ -35,7 +35,7 @@ type TCPConfig struct {
 	MessageOffset         int                `yaml:"messageOffset" json:"MassageOffset"`
 	MessageLength         int                `yaml:"messageLength" json:"MessageLength"`
 	ReverseDomain         bool               `yaml:"reverseDomain" json:"ReverseDomain"`
-	Data                  []byte             `yaml:"-" json:"-"`
+	Data                  []byte             `yaml:"-" json:"Data"`
 	DataString            string             `yaml:"dataString" json:"DataString"`
 	Payload               []byte             `yaml:"-" json:"Payload"`
 	Options               []layers.TCPOption `yaml:"-" json:"Options"`
