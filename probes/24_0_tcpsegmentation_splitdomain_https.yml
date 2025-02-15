@@ -55,7 +55,7 @@ packets:
         psh: true
         ack: true
       messageOffset: 0
-      messageLength: 164
+      messageLength: 246
     delay: 1
 
   - ethernet:
@@ -68,7 +68,7 @@ packets:
       flags:
         psh: true
         ack: true
-      messageOffset: 164
+      messageOffset: 246
       messageLength: -1
     delay: 1
 

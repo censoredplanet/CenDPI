@@ -178,6 +178,58 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
 	}
 
 	cipherSuites := []uint16{
+		0x1303,
+		0x1302,
+		0x1301,
+		0xcca9,
+		0xcca8,
+		0xccaa,
+		0xc030,
+		0xc02c,
+		0xc028,
+		0xc024,
+		0xc014,
+		0xc00a,
+		0x009f,
+		0x006b,
+		0x0039,
+		//0xff85,
+		0x00c4,
+		0x0088,
+		0x0081,
+		0x009d,
+		0x003d,
+		0x0035,
+		0x00c0,
+		0x0084,
+		0xc02f,
+		0xc02b,
+		0xc027,
+		0xc023,
+		0xc013,
+		0xc009,
+		0x009e,
+		0x0067,
+		0x0033,
+		0x00be,
+		0x0045,
+		0x009c,
+		0x003c,
+		0x002f,
+		0x00ba,
+		0x0041,
+		0xc011,
+		0xc007,
+		0x0005,
+		0x0004,
+		0xc012,
+		0xc008,
+		0x0016,
+		0x000a,
+		0x00ff,
+	}
+
+	/*cipherSuites := []uint16{
 		0x1301, // TLS_AES_128_GCM_SHA256
 		0x1302, // TLS_AES_256_GCM_SHA384
 		0x1303, // TLS_CHACHA20_POLY1305_SHA256
@@ -185,7 +237,7 @@ func buildClientHello(cfg ClientHelloConfig) ([]byte, error) {
 		0xC02C, // ECDHE-ECDSA-AES256-GCM-SHA384
 		0xC02F, // ECDHE-RSA-AES128-GCM-SHA256
 		0xC030, // ECDHE-RSA-AES256-GCM-SHA384
-	}
+	}*/
 	cipherSuitesBytes := make([]byte, 2*len(cipherSuites))
 	for i, cs := range cipherSuites {
 		binary.BigEndian.PutUint16(cipherSuitesBytes[i*2:], cs)

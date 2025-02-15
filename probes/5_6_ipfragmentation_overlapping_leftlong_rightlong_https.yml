@@ -48,8 +48,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: true
-      fragmentOffset: 10
-      messageOffset: 80
+      fragmentOffset: 20
+      messageOffset: 160
       messageLength: 136
       reverseDomain: false
     delay: 0.5
@@ -62,7 +62,7 @@ packets:
       moreFragments: true
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 224
+      messageLength: 304
       reverseDomain: true
     delay: 0.5
 
@@ -72,8 +72,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: false
-      fragmentOffset: 28
-      messageOffset: 224
+      fragmentOffset: 38
+      messageOffset: 304
       messageLength: -1
       reverseDomain: false
     delay: 1

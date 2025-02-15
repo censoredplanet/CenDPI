@@ -50,7 +50,7 @@ packets:
       moreFragments: true
       fragmentOffset: 0
       messageOffset: 0
-      messageLength: 184
+      messageLength: 264
     delay: 0.5
 
   - ethernet:
@@ -59,8 +59,8 @@ packets:
       ttl: 64
       id: 33347
       moreFragments: false
-      fragmentOffset: 23
-      messageOffset: 184
+      fragmentOffset: 33
+      messageOffset: 264
       messageLength: -1
     delay: 1
 

@@ -54,7 +54,7 @@ packets:
         psh: true
         ack: true
       messageOffset: 0
-      messageLength: -1
+      messageLength: 1300
     delay: 1
 
   - ethernet:
@@ -62,6 +62,21 @@ packets:
       tos: 0
       ttl: 64
       id: 33349
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 1300
+      messageLength: -1
+      seqRelativeToInitial: 1301
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33350
     tcp:
       window: 2056
       flags:
@@ -73,7 +88,7 @@ packets:
     ip:
       tos: 0
       ttl: 64
-      id: 33350
+      id: 33351
     tcp:
       window: 2056
       flags:

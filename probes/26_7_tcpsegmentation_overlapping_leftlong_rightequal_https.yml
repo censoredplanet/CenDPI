@@ -54,9 +54,9 @@ packets:
       flags:
         psh: true
         ack: true
-      messageOffset: 8
+      messageOffset: 90
       messageLength: 188
-      seqRelativeToInitial: 9
+      seqRelativeToInitial: 91
     delay: 0.5
 
   - ethernet:
@@ -70,7 +70,7 @@ packets:
         psh: true
         ack: true
       messageOffset: 0
-      messageLength: 196
+      messageLength: 278
       seqRelativeToInitial: 1
       reverseDomain: true
     delay: 0.5
@@ -85,9 +85,9 @@ packets:
       flags:
         psh: true
         ack: true
-      messageOffset: 196
+      messageOffset: 278
       messageLength: -1
-      seqRelativeToInitial: 197
+      seqRelativeToInitial: 279
     delay: 1
 
   - ethernet:
