@@ -121,6 +121,12 @@ func BuildIPv4Log(ip4 ip.IPConfig) IPLog {
 
 func BuildTCPLog(tcp tcp.TCPConfig) TCPLog {
 
+	data := tcp.Data
+	// truncate the data since we don't parse TLS yet
+	if (tcp.SrcPort == 443 || tcp.DstPort == 443) && len(data) > 50 {
+		data = data[:50]
+	}
+
 	return TCPLog{
 		SrcPort: tcp.SrcPort,
 		DstPort: tcp.DstPort,
@@ -129,7 +135,7 @@ func BuildTCPLog(tcp tcp.TCPConfig) TCPLog {
 		Ack:     tcp.Ack,
 		Flags:   tcp.Flags,
 		Options: tcp.Options,
-		Data:    tcp.Data,
+		Data:    data,
 	}
 }
 
