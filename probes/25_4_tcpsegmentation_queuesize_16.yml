@@ -7,7 +7,7 @@ message:
   tls:
     clientHelloConfig:
       chVersion: "0303"
-      pqKeyShare: true
+      pqKeyShare: false
     records:
       - contentType: "16"
         recordVersion: "0301"
@@ -254,7 +254,7 @@ packets:
         psh: true
         ack: true
       messageOffset: 112
-      messageLength: 400
+      messageLength: 8
       seqRelativeToInitial: 113
 
   - ethernet:
@@ -267,9 +267,9 @@ packets:
       flags:
         psh: true
         ack: true
-      messageOffset: 512
+      messageOffset: 120
       messageLength: -1
-      seqRelativeToInitial: 513
+      seqRelativeToInitial: 121
     delay: 1
 
   - ethernet:

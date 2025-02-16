@@ -329,7 +329,7 @@ func main() {
 		time.Sleep(3 * time.Second)
 		if !probe.IsControl {
 			// longer wait between consecutive probes
-			time.Sleep(120 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 	}
 	cancel()

@@ -7,7 +7,7 @@ message:
   tls:
     clientHelloConfig:
       chVersion: "0303"
-      pqKeyShare: true
+      pqKeyShare: false
     records:
       - contentType: "16"
         recordVersion: "0301"
