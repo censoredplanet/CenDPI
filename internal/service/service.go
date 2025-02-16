@@ -362,16 +362,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	for n, p := range probe.Packets {
 		if n == 0 {
 			initSeq := rand.Uint32()
-			_, ok := loadTCPState(flowKey)
+			/*_, ok := loadTCPState(flowKey)
 			if ok {
 				log.Printf("packet %d: TCP state already exists for flow %v\n", n, flowKey)
 				break
-			}
-			//tcpStates[flowKey] = tcpState{
-			//SeqNum:     initSeq,
-			//AckNum:     0,
-			//InitialSeq: initSeq,
-			//}
+			}*/
 			storeTCPState(flowKey, tcpState{
 				SeqNum:     initSeq,
 				AckNum:     0,

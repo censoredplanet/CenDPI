@@ -155,6 +155,19 @@ func copyServiceConfig(original service.ServiceConfig) (service.ServiceConfig, e
 	return copy, nil
 }
 
+func drainChannels(chMap map[netcap.FlowKey]chan netcap.PacketInfo) {
+	for _, ch := range chMap {
+		for {
+			select {
+			case <-ch:
+			default:
+				goto NEXT
+			}
+		}
+	NEXT:
+	}
+}
+
 func main() {
 	if os.Geteuid() != 0 {
 		log.Fatal("This program must be run as root! (sudo)")
@@ -164,6 +177,7 @@ func main() {
 	targetConfigPath := flag.String("target", "", "Path to target.jsonl (line-delimited JSON)")
 	savePcap := flag.Bool("pcap", false, "Saves the probes additionally within pcap files")
 	resultsPath := flag.String("resultPath", "results.json", "Path to JSON results file")
+	rounds := flag.Int("rounds", 1, "Number of rounds to run for each probe-target measurement")
 
 	flag.Parse()
 	if *measurementConfigPath == "" || *targetConfigPath == "" {
@@ -293,44 +307,47 @@ func main() {
 	resultsCh := make(chan netcap.Result, 1000)
 	go netCap.SaveResults(ctx, *resultsPath, resultsCh)
 
-	for _, probe := range probeTemplates {
-		mode := "test"
-		if probe.IsControl {
-			mode = "control"
-		}
-		log.Printf("=== Starting Probe Round: %s (%s) ===", probe.Name, mode)
+	for i := 0; i < *rounds; i++ {
+		for _, probe := range probeTemplates {
+			mode := "test"
+			if probe.IsControl {
+				mode = "control"
+			}
+			log.Printf("=== Starting Probe Round: %s (%s) ===", probe.Name, mode)
 
-		// Run all targets in *this* probe concurrently.
-		// Then wait for them before moving on to the next probe.
-		var roundWG sync.WaitGroup
-		for _, tgt := range targets {
-			if probe.Protocol != "both" && probe.Protocol != tgt.Protocol {
-				continue
-			}
-			roundWG.Add(1)
-			probeCopy, err := copyServiceConfig(probe)
-			if err != nil {
-				log.Fatalf("Failed copying config for targets: %v", err)
-			}
-			go func(c service.ServiceConfig, t service.Target) {
-				defer roundWG.Done()
-				flowKey := netcap.NormalizeFlowKey(c.SrcIP, c.SrcPort, net.ParseIP(t.TargetIP), layers.TCPPort(t.TargetPort))
-				if _, ok := chMap[flowKey]; !ok {
-					log.Fatalf("FlowKey not found in chMap: %v", flowKey)
+			// Run all targets in *this* probe concurrently.
+			// Then wait for them before moving on to the next probe.
+			var roundWG sync.WaitGroup
+			for _, tgt := range targets {
+				if probe.Protocol != "both" && probe.Protocol != tgt.Protocol {
+					continue
 				}
-				resultsCh <- service.StartSingleMeasurement(netCap, c, t, chMap[flowKey])
+				roundWG.Add(1)
+				probeCopy, err := copyServiceConfig(probe)
+				if err != nil {
+					log.Fatalf("Failed copying config for targets: %v", err)
+				}
+				go func(c service.ServiceConfig, t service.Target) {
+					defer roundWG.Done()
+					flowKey := netcap.NormalizeFlowKey(c.SrcIP, c.SrcPort, net.ParseIP(t.TargetIP), layers.TCPPort(t.TargetPort))
+					if _, ok := chMap[flowKey]; !ok {
+						log.Fatalf("FlowKey not found in chMap: %v", flowKey)
+					}
+					resultsCh <- service.StartSingleMeasurement(netCap, c, t, chMap[flowKey])
 
-			}(probeCopy, tgt)
-		}
+				}(probeCopy, tgt)
+			}
 
-		// Wait for all targets in this probe to finish
-		roundWG.Wait()
-		// 3 seconds wait between control and test of the same probe
-		time.Sleep(3 * time.Second)
-		if !probe.IsControl {
-			// longer wait between consecutive probes
-			time.Sleep(30 * time.Second)
+			// Wait for all targets in this probe to finish
+			roundWG.Wait()
+			// 3 seconds wait between control and test of the same probe
+			time.Sleep(3 * time.Second)
+			if !probe.IsControl {
+				// longer wait between consecutive probes
+				time.Sleep(30 * time.Second)
+			}
 		}
+		drainChannels(chMap)
 	}
 	cancel()
 	log.Println("All measurements done.")
