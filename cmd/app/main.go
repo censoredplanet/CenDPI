@@ -346,8 +346,9 @@ func main() {
 				// longer wait between consecutive probes
 				time.Sleep(30 * time.Second)
 			}
+			drainChannels(chMap)
+			time.Sleep(3 * time.Second)
 		}
-		drainChannels(chMap)
 	}
 	cancel()
 	log.Println("All measurements done.")
