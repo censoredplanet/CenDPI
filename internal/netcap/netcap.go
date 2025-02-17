@@ -12,10 +12,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/censoredplanet/CenDPI/internal/http"
 	"github.com/censoredplanet/CenDPI/internal/ip"
 	"github.com/censoredplanet/CenDPI/internal/tcp"
-	"github.com/censoredplanet/CenDPI/internal/tls"
 
 	// cenTls "github.com/censoredplanet/CenDPI/internal/tls"
 	"github.com/gopacket/gopacket"
@@ -72,14 +70,15 @@ type PacketInfo struct {
 // 	Tls - content type or record type, we basically want to know if the package is a server hello
 
 type Result struct {
-	Probe         string           `json:"Probe"`
-	Domain        string           `json:"Domain"`
-	Control       bool             `json:"Control"`
-	TargetIP      string           `json:"TargetIP"`
-	TargetPort    int              `json:"TargetPort"`
-	Packets       []ResultPacket   `json:"Packets"`
-	HTTPResponses []http.Response  `json:"HTTPResponses"`
-	ServerHello   *tls.ServerHello `json:"ServerHello"`
+	Probe      string         `json:"Probe"`
+	Domain     string         `json:"Domain"`
+	Control    bool           `json:"Control"`
+	TargetIP   string         `json:"TargetIP"`
+	TargetPort int            `json:"TargetPort"`
+	Packets    []ResultPacket `json:"Packets"`
+	//HTTPResponses []http.Response  `json:"HTTPResponses"`
+	//ServerHello   *tls.ServerHello `json:"ServerHello"`
+	Label string `json:"Label"`
 }
 
 type ResultPacket struct {

@@ -356,6 +356,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	results.Probe = probe.Name
 	results.TargetIP = probe.DstIP.String()
 	results.TargetPort = int(probe.DstPort)
+	results.Label = target.Label
 
 	flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, probe.DstIP, probe.DstPort)
 	probe.Flowkey = flowKey
@@ -482,11 +483,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
 				break
 			} else {
-				results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
+				//results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
 				results.Packets = append(results.Packets, result.Packets...)
-				if result.ServerHello != nil {
-					results.ServerHello = result.ServerHello
-				}
+				//if result.ServerHello != nil {
+				//results.ServerHello = result.ServerHello
+				//}
 			}
 
 		} else {
@@ -606,11 +607,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
 					break
 				} else {
-					results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
+					//results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
 					results.Packets = append(results.Packets, result.Packets...)
-					if result.ServerHello != nil {
-						results.ServerHello = result.ServerHello
-					}
+					//if result.ServerHello != nil {
+					//results.ServerHello = result.ServerHello
+					//}
 				}
 
 			} else {
