@@ -62,6 +62,8 @@ func (i *IPConfig) UnmarshalYAML(node *yaml.Node) error {
 		i.Protocol = layers.IPProtocolTCP
 	case "udp":
 		i.Protocol = layers.IPProtocolUDP
+	case "invalid":
+		i.Protocol = layers.IPProtocolICMPv6
 	default:
 		// default to tcp
 		i.Protocol = layers.IPProtocolTCP

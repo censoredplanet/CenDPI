@@ -3,9 +3,10 @@ resultsPath: results
 sourceMAC: f4:d4:88:74:62:40
 gatewayMAC: 7c:10:c9:72:ef:c0
 sourceIP: 192.168.51.180
-startSourcePort: 42060
+destinationIP: 192.168.51.181
+startSourcePort: 40000
 probelist:
-#  - "probes/0_0_standard_request.yml"
+  - "probes/0_0_standard_request.yml"
 #  - "probes/0_1_statefulness_sameseq.yml"
 #  - "probes/0_2_statefulness_diffseq.yml"
 #  - "probes/1_0_ipfragmentation_simple.yml"

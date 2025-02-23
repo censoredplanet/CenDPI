@@ -201,17 +201,12 @@ func (n *NetCap) WritePacketToPCAP(writer *pcapgo.Writer, packet []byte, capture
 }
 
 func (n *NetCap) SendPacket(packet []byte, flowKey FlowKey) error {
-	if n.Config.SavePcap {
-		if _, ok := n.PcapWriters[flowKey]; !ok {
-			log.Fatalf("FlowKey %v does not exist in the map", flowKey)
-		}
-		// Write packet to pcap file before sending
-		if err := n.WritePacketToPCAP(n.PcapWriters[flowKey], packet, time.Now()); err != nil {
-			return err
-		}
+	if _, ok := n.PcapWriters[flowKey]; !ok {
+		log.Fatalf("FlowKey %v does not exist in the map", flowKey)
 	}
-	if err := n.Handle.WritePacketData(packet); err != nil {
-		return fmt.Errorf("failed to send packet: %w", err)
+	// Write packet to pcap file before sending
+	if err := n.WritePacketToPCAP(n.PcapWriters[flowKey], packet, time.Now()); err != nil {
+		return err
 	}
 	return nil
 }

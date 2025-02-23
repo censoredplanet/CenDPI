@@ -17,7 +17,6 @@ import (
 	"github.com/censoredplanet/CenDPI/internal/netcap"
 	"github.com/censoredplanet/CenDPI/internal/tcp"
 	"github.com/censoredplanet/CenDPI/internal/tls"
-	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 
 	//"github.com/gopacket/gopacket/tcpassembly"
@@ -27,6 +26,7 @@ import (
 // Each service corresponds to one measurement (i.e., one TCP connection)
 type ServiceConfig struct {
 	Name      string
+	Number    uint16
 	Iface     string
 	PcapPath  string
 	BPF       string
@@ -57,10 +57,11 @@ type ServiceMessage struct {
 }
 
 type ServicePacket struct {
-	Ethernet ethernet.EthernetConfig
-	IP       ip.IPConfig    `yaml:"ip"`
-	TCP      *tcp.TCPConfig `yaml:"tcp"`
-	Delay    float64        `yaml:"delay"` // Per-packet delay in seconds
+	Ethernet     ethernet.EthernetConfig
+	IP           ip.IPConfig    `yaml:"ip"`
+	TCP          *tcp.TCPConfig `yaml:"tcp"`
+	Delay        float64        `yaml:"delay"` // Per-packet delay in seconds
+	ServerPacket bool           `yaml:"serverPacket"`
 }
 
 type Target struct {
@@ -124,126 +125,14 @@ func wrapError(err *error, str string, args ...any) {
 	}
 }
 
-func collectPackets(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, duration time.Duration, flowKey netcap.FlowKey) netcap.Result {
-	timer := time.NewTimer(duration)
-	var savePacket struct {
-		netcap.FlowKey
-		Packets []gopacket.Packet
-	}
-	savePacket.FlowKey = flowKey
-	var result netcap.Result
-	//var hasHTTP bool
-	//var hasTLS bool
-	defer timer.Stop()
-	for {
-		select {
-		case packet := <-packetCh:
-			savePacket.Packets = append(savePacket.Packets, packet.Data)
-			packetFlowKey := netcap.NormalizeFlowKey(packet.SrcIP, packet.SrcPort, packet.DstIP, packet.DstPort)
-			if packetFlowKey != flowKey {
-				log.Printf("packet received not belonging to the current flow: %v\n", packetFlowKey)
-				// TODO: perhaps we should panic() instead since this would indicate there's something seriously wrong?
-				continue
-			}
-
-			tcpLayer := packet.Data.Layer(layers.LayerTypeTCP)
-			if tcpLayer != nil {
-				t := tcpLayer.(*layers.TCP)
-				/*if t.SrcPort == 80 {
-					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
-						hasHTTP = true
-					}
-				}
-				if t.SrcPort == 443 {
-					if appLayer := packet.Data.ApplicationLayer(); appLayer != nil {
-						hasTLS = true
-					}
-				}*/
-				states, ok := loadTCPState(flowKey)
-				if !ok {
-					log.Printf("collectPackets: no TCP state found for flow %v\n", flowKey)
-					// TODO: perhaps we should panic() instead?
-					return netcap.Result{}
-				}
-
-				// Calculate how much to increment Ack
-				ackIncrement := uint32(len(t.Payload))
-				// SYN or FIN increments ACK by 1
-				if t.SYN || t.FIN {
-					ackIncrement++
-				}
-
-				// Move seq forward if the remote host ACKs our data
-				if states.SeqNum < packet.Ack {
-					states.SeqNum = packet.Ack
-				}
-				// Our new Ack = incoming seq + ackIncrement
-				nextAck := packet.Seq + ackIncrement
-				if states.AckNum < nextAck {
-					states.AckNum = nextAck
-				}
-
-				storeTCPState(flowKey, tcpState{
-					SeqNum:     states.SeqNum,
-					AckNum:     states.AckNum,
-					InitialSeq: states.InitialSeq,
-				})
-				// Call to parse packets
-				result.Packets = append(result.Packets, netCap.ParseResults(packet.Data))
-			}
-
-		case <-timer.C:
-			if netCap.Config.SavePcap {
-				if _, ok := netCap.PcapWriters[savePacket.FlowKey]; !ok {
-					log.Fatalf("FlowKey %v does not exist in the pcapWriters", savePacket.FlowKey)
-				}
-				writer := netCap.PcapWriters[savePacket.FlowKey]
-				for _, packet := range savePacket.Packets {
-					netCap.WritePacketToPCAP(writer, packet.Data(), packet.Metadata().Timestamp)
-				}
-			}
-			/*
-				if hasHTTP {
-					factory := http.NewHttpStreamFactory()
-					assembler := tcpassembly.NewAssembler(tcpassembly.NewStreamPool(factory))
-					assembler.AssemblerOptions.MaxBufferedPagesTotal = 100000
-					assembler.AssemblerOptions.MaxBufferedPagesPerConnection = 100
-					for _, packet := range savePacket.Packets {
-						if tcp := packet.TransportLayer().(*layers.TCP); tcp != nil {
-							assembler.AssembleWithTimestamp(
-								packet.NetworkLayer().NetworkFlow(),
-								tcp,
-								packet.Metadata().Timestamp,
-							)
-						}
-					}
-					assembler.FlushAll()
-					select {
-					case resp := <-factory.Responses:
-						result.HTTPResponses = append(result.HTTPResponses, *resp)
-						return result
-					case <-time.After(3 * time.Second):
-						return result
-					}
-				}
-				if hasTLS {
-					result.ServerHello = tls.ParseServerHello(savePacket.Packets)
-				}
-			*/
-
-			return result
-		}
-	}
-}
-
-func sendAndCollect(netCap *netcap.NetCap, packetCh <-chan netcap.PacketInfo, pkt []byte, delay time.Duration, flowKey netcap.FlowKey) (netcap.Result, error) {
+func sendAndWait(netCap *netcap.NetCap, pkt []byte, delay time.Duration, flowKey netcap.FlowKey) error {
 	if err := netCap.SendPacket(pkt, flowKey); err != nil {
-		return netcap.Result{}, err
+		return err
 	}
 	if delay > 0 {
-		return collectPackets(netCap, packetCh, delay, flowKey), nil
+		time.Sleep(delay)
 	}
-	return netcap.Result{}, nil
+	return nil
 }
 
 func buildSingleMessage(cfg ServiceConfig, domain string) ([]byte, error) {
@@ -317,15 +206,11 @@ func randomCase(s string) string {
 	return b.String()
 }
 
-func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target Target, packetCh <-chan netcap.PacketInfo) netcap.Result {
+func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, packetCh <-chan netcap.PacketInfo) {
 	var err error
 	defer wrapError(&err, "CenDPI")
-	var results netcap.Result
 
-	probe.Domain = target.TestDomain
-	if probe.IsControl {
-		probe.Domain = target.ControlDomain
-	}
+	probe.Domain = "blocked.com"
 	if probe.Message.DomainAllCaps {
 		probe.Domain = strings.ToUpper(probe.Domain)
 	} else if probe.Message.DomainRandomCase {
@@ -344,44 +229,69 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 		probe.Domain = probe.Domain + "     "
 	}
 
-	dstIP := net.ParseIP(target.TargetIP)
-	dstPort := layers.TCPPort(target.TargetPort)
-	probe.Protocol = target.Protocol
-	probe.DstPort = dstPort
-	probe.DstIP = dstIP
-	probe.Label = target.Label
-
-	results.Control = probe.IsControl
-	results.Domain = probe.Domain
-	results.Probe = probe.Name
-	results.TargetIP = probe.DstIP.String()
-	results.TargetPort = int(probe.DstPort)
-	results.Label = target.Label
-
 	flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, probe.DstIP, probe.DstPort)
 	probe.Flowkey = flowKey
 	for n, p := range probe.Packets {
+
+		if p.ServerPacket {
+			// server sent packet
+			// do some processing
+
+			p.IP.SrcIP, p.IP.DstIP = probe.DstIP, probe.SrcIP
+			p.TCP.SrcPort, p.TCP.DstPort = probe.DstPort, probe.SrcPort
+			initAck := rand.Uint32()
+			state, ok := loadTCPState(flowKey)
+			if !ok {
+				log.Printf("packet %d: no TCP state found for flow %v\n", n, flowKey)
+				break
+			}
+
+			p.TCP.Seq, p.TCP.Ack = initAck, state.SeqNum+1
+			storeTCPState(flowKey, tcpState{
+				SeqNum:     state.SeqNum + 1,
+				AckNum:     initAck + 1,
+				InitialSeq: state.InitialSeq,
+			})
+
+			p.TCP.Flags = tcp.TCPFlags{SYN: true, ACK: true}
+
+			// Build the Ethernet/IP/TCP layers
+			packet, err := assembler.New().
+				AddLayer(ethernet.New(&p.Ethernet)).
+				AddLayer(ip.New(&p.IP)).
+				AddLayer(tcp.New(p.TCP)).
+				Build(p.TCP.CorruptChecksum)
+			if err != nil {
+				log.Printf("packet %d: Assembler Build error: %v\n", n, err)
+				break
+			}
+
+			if err := sendAndWait(netCap, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
+				log.Printf("packet %d: sendAndWait error: %v\n", n, err)
+				break
+			}
+
+			continue
+		}
+
 		if n == 0 {
 			initSeq := rand.Uint32()
-			/*_, ok := loadTCPState(flowKey)
-			if ok {
-				log.Printf("packet %d: TCP state already exists for flow %v\n", n, flowKey)
-				break
-			}*/
 			storeTCPState(flowKey, tcpState{
 				SeqNum:     initSeq,
 				AckNum:     0,
 				InitialSeq: initSeq,
 			})
 		}
-		p.IP.SrcIP, p.IP.DstIP = probe.SrcIP, dstIP
+
+		p.IP.SrcIP, p.IP.DstIP = probe.SrcIP, probe.DstIP
+
 		hasTCP := false
 		if p.TCP != nil {
 			hasTCP = true
 			p.TCP.SrcPort, p.TCP.DstPort = probe.SrcPort, probe.DstPort
 		}
+
 		if hasTCP {
-			// state := tcpStates[flowKey]
 			state, ok := loadTCPState(flowKey)
 			if !ok {
 				log.Printf("packet %d: no TCP state found for flow %v\n", n, flowKey)
@@ -473,21 +383,10 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 				log.Printf("packet %d: Assembler Build error: %v\n", n, err)
 				break
 			}
-			results.Packets = append(results.Packets, netcap.ResultPacket{
-				Incoming: false,
-				IP:       netcap.BuildIPv4Log(p.IP),
-				TCP:      netcap.BuildTCPLog(*p.TCP),
-			})
 
-			if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
-				log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
+			if err := sendAndWait(netCap, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
+				log.Printf("packet %d: sendAndWait error: %v\n", n, err)
 				break
-			} else {
-				//results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
-				results.Packets = append(results.Packets, result.Packets...)
-				//if result.ServerHello != nil {
-				//results.ServerHello = result.ServerHello
-				//}
 			}
 
 		} else {
@@ -579,39 +478,9 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 					break
 				}
 
-				ipLayerWithFragmentPayload := ip.IPConfig{
-					SrcIP:          p.IP.SrcIP,
-					DstIP:          p.IP.DstIP,
-					Version:        p.IP.Version,
-					IHL:            p.IP.IHL,
-					TOS:            p.IP.TOS,
-					Id:             p.IP.Id,
-					Protocol:       p.IP.Protocol,
-					TTL:            p.IP.TTL,
-					Options:        p.IP.Options,
-					Padding:        p.IP.Padding,
-					FragmentOffset: p.IP.FragmentOffset,
-					MoreFragments:  p.IP.MoreFragments,
-					DontFragment:   p.IP.DontFragment,
-					EvilBit:        p.IP.EvilBit,
-					RawPayload:     fragmentPayload,
-				}
-
-				results.Packets = append(results.Packets, netcap.ResultPacket{
-					Incoming: false,
-					IP:       netcap.BuildIPv4Log(ipLayerWithFragmentPayload),
-					// TCP: *p.TCP,
-				})
-
-				if result, err := sendAndCollect(netCap, packetCh, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
-					log.Printf("packet %d: sendAndCollect error: %v\n", n, err)
+				if err := sendAndWait(netCap, packet, time.Duration(p.Delay*float64(time.Second)), flowKey); err != nil {
+					log.Printf("packet %d: sendAndWait error: %v\n", n, err)
 					break
-				} else {
-					//results.HTTPResponses = append(results.HTTPResponses, result.HTTPResponses...)
-					results.Packets = append(results.Packets, result.Packets...)
-					//if result.ServerHello != nil {
-					//results.ServerHello = result.ServerHello
-					//}
 				}
 
 			} else {
@@ -621,5 +490,4 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 			}
 		}
 	}
-	return results
 }
