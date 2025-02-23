@@ -27,7 +27,7 @@ type GlobalMeasurementConfig struct {
 	SourceIP        net.IP           `yaml:"-"`
 	DestinationIP   net.IP           `yaml:"-"`
 	StartSourcePort uint16           `yaml:"startSourcePort"`
-	Probelist       []string         `yaml:"probelist"`
+	ProbeDir        string           `yaml:"probedir"`
 }
 
 func (c *GlobalMeasurementConfig) UnmarshalYAML(node *yaml.Node) error {
@@ -92,6 +92,7 @@ func parseProbeConfigYAML(path string, cfg *GlobalMeasurementConfig) (service.Se
 	// Use the base filename (strips directories and .yml/.yaml extension)
 	filename := filepath.Base(path)
 	nameOnly := strings.TrimSuffix(filename, filepath.Ext(filename))
+	config.Name = nameOnly
 
 	// check if nameOnly can be converted to uint16 and convert if so otherwise error out
 	if _, err := fmt.Sscanf(nameOnly, "%d", &config.Number); err != nil {
@@ -137,9 +138,18 @@ func main() {
 		log.Fatalf("Error parsing measurement config: %v\n", err)
 	}
 
+	// Read all probe files from the specified directory
+	if globalCfg.ProbeDir == "" {
+		log.Fatal("Probe directory not specified in the measurement config")
+	}
+	probeFiles, err := filepath.Glob(filepath.Join(globalCfg.ProbeDir, "*.yml"))
+	if err != nil {
+		log.Fatalf("Error reading probe directory: %v", err)
+	}
+
 	// build probe template
 	var probeTemplates []service.ServiceConfig
-	for _, probeFile := range globalCfg.Probelist {
+	for _, probeFile := range probeFiles {
 		probeCfg, err := parseProbeConfigYAML(probeFile, globalCfg)
 		if err != nil {
 			log.Printf("Skipping probe %s: %v\n", probeFile, err)
@@ -153,6 +163,10 @@ func main() {
 		}
 		probeCfg.SrcIP = globalCfg.SourceIP
 		probeCfg.DstIP = globalCfg.DestinationIP
+
+		if probeCfg.Protocol != "both" && probeCfg.Protocol != *curProtocol {
+			continue
+		}
 
 		probeCfg.SrcPort = layers.TCPPort(globalCfg.StartSourcePort + probeCfg.Number)
 		if *curProtocol == "http" {

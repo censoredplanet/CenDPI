@@ -356,7 +356,7 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, packetCh
 				}
 				endPos := messageOffsetBytes + length
 				if endPos > len(probe.Message.PayloadBytes) {
-					log.Printf("packet %d: segment out of range\n", n)
+					log.Printf("packet %d: segment out of range. Current probe: %d\n", n, probe.Number)
 					break
 				}
 				var raw []byte

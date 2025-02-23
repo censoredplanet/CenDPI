@@ -301,11 +301,7 @@ func (n *NetCap) SetupPCAPWriters(flowKeyToPcap map[FlowKey]NetCapPcapInfo, path
 		}
 
 		// filename: e.g. "0_0_standard_request_test.pcap" or "0_0_standard_request_control.pcap"
-		testOrControl := "control"
-		if !pcapInfo.IsControl {
-			testOrControl = "test"
-		}
-		fileName := fmt.Sprintf("%s_%s.pcap", pcapInfo.ProbeName, testOrControl)
+		fileName := fmt.Sprintf("%s.pcap", pcapInfo.ProbeName)
 		fullFilePath := filepath.Join(subdirFullPath, fileName)
 
 		// Create the file
