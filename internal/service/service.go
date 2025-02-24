@@ -313,6 +313,10 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, packetCh
 				p.TCP.Seq = uint32(int64(curIsq) + int64(p.TCP.SeqRelativeToInitial))
 			}
 
+			if p.TCP.SeqSetToInitial {
+				p.TCP.Seq = curIsq
+			}
+
 			// If we have a "MessageLength" in the config, it means we want to slice
 			// from the overall application message.
 			if p.TCP.MessageLength != 0 {

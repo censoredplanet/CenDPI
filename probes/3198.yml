@@ -1,0 +1,128 @@
+strategy: Insert[position:I1;flag:PA;data:random;option:inwindowSeq;repeat:1]
+protocol: both
+message:
+  http: 
+    request: "GET / HTTP/1.1\r\nHost: ${}\r\nUser-Agent: curl/8.11.1\r\nAccept: */*\r\n\r\n"
+  tls:
+    clientHelloConfig:
+      chVersion: "0303"
+    records:
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 0
+        length: -1
+
+packets:
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33345
+    tcp:
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+    delay: 1
+    
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        syn: false
+        ack: true
+        psh: true
+        fin: false
+        rst: false
+        urg: false
+        ece: false
+      seqRelativeToExpected: 100
+      messageOffset: 0
+      messageLength: -1
+      randomPayload: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        syn: false
+        ack: true
+        psh: true
+        fin: false
+        rst: false
+        urg: false
+        ece: false
+      seqRelativeToExpected: 100
+      messageOffset: 0
+      messageLength: -1
+      randomPayload: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 0
+    tcp:
+      window: 2056
+      flags:
+        syn: true
+        ack: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+    serverPacket: true
+    delay: 1
+      
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33346
+    tcp:
+      window: 2056
+      flags:
+        ack: true
+    delay: 1
+
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+    tcp:
+      window: 2056
+      flags:
+        psh: true
+        ack: true
+      messageOffset: 0
+      messageLength: -1
+    delay: 1
+    

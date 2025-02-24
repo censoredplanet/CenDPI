@@ -28,6 +28,7 @@ type TCPConfig struct {
 	Urgent                uint16             `yaml:"urgentPointer" json:"Urgent"`
 	Seq                   uint32             `json:"Seq"`
 	Ack                   uint32             `json:"Ack"`
+	SeqSetToInitial       bool               `yaml:"seqSetToInitial" json:"SeqSetToInitial"`
 	SeqRelativeToInitial  int                `yaml:"seqRelativeToInitial" json:"SeqRelativeToInitial"`
 	SeqRelativeToExpected int                `yaml:"seqRelativeToExpected" json:"SeqRelativeToExpected"`
 	AckRelativeToExpected int                `yaml:"ackRelativeToExpected" json:"AckRelativeToExpected"`
@@ -37,6 +38,8 @@ type TCPConfig struct {
 	ReverseDomain         bool               `yaml:"reverseDomain" json:"ReverseDomain"`
 	Data                  []byte             `yaml:"-" json:"Data"`
 	DataString            string             `yaml:"dataString" json:"DataString"`
+	RandomPayload         bool               `yaml:"randomPayload" json:"RandomPayload"`
+	AltProto              bool               `yaml:"altProto" json:"AltProto"`
 	Payload               []byte             `yaml:"-" json:"Payload"`
 	Options               []layers.TCPOption `yaml:"-" json:"Options"`
 	CorruptChecksum       bool               `yaml:"corruptChecksum" json:"CorruptChecksum"`
@@ -165,7 +168,32 @@ func (t *TCPLayer) Build() (gopacket.SerializableLayer, error) {
 		}
 		tcp.Payload = []byte(tcpData)
 	}
-
+	if t.config.RandomPayload {
+		randomHexString := "e04a34e5ea66205e2217ffc9033b25fc1bb3b8ea76c35ea367053a4f64f1f7836f4edfebffd64652fb5035981444f31659953aa658fa6a24ef92cf048a1d816c53a1d82c6e60360627b9459c3f5fd69c11966fd667641b41d9b07805240fe28a7495ba4b9c97676195db5b6906ddd5ec42a8e0259629658aa0f4f6b929a6e6ce825176592ff32ff0204ea9a6ba74e1ee871f2ad6e00e20737e55d5f1e5e178d7b6a2d6308fe96aad28a37bee394e30386c2b26711905ed1f5d36c14e9586213d1bd8e7a468ce5ae2c67fd31908e6cdefe12303b0e9ed644cdcd232f28f2b06d9187a8f241047176ae02232bac3c72304c872745baf4b02c0edc473102cdafe9a89f6ed4fbb38e141d0a0df6cbed18227dce91f0eebd07a79feacacb69b31451ba84855fc0dee8b12e4f323f47f449907beaa71551e03e6cf1fe94613e83541e5aa45960f1734412b517cd65a3078d428a41dfd1c3b702097d6054fe12f6c17b61098d8fc30a6c518c41a79ea321f0879f248f6890acc5e2cdfa72ce559deda4727c26c31a263dbdd2cdb77225648f224b33319148b8b718f4e593ce0a1a413573e991e3487a90822b64b4db2080de2386aa8c82530b63e2be955869fe2589afc4fae4e20967db396d1ca85c721d0f902cb4a80e53fc20beb2bbc36f33b34f6cd3507cb430de188429d4f613eda037f20378d620c"
+		randomData, err := hex.DecodeString(randomHexString)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex in TCP random data: '%s'", randomHexString)
+		}
+		tcp.Payload = []byte(randomData)
+	} else if t.config.AltProto {
+		if tcp.DstPort == layers.TCPPort(80) {
+			httpsString := "16030100e8010000e40303000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf000e130113021303c02bc02cc02fc0300100008d002b0009080304030303020301003300260024001d0020afb0b1b2b3b4b5b6b7b8b9babbbcbdbebfa0a1a2a3a4a5a6a7a8a9aaabacadae00000010000e00000b636f652e706c616d65786d000b00020100000a000a0008001d001700180019000d00180016080606010603080505010503080404010403020102030010000e000c02683208687474702f312e31"
+			httpsData, err := hex.DecodeString(httpsString)
+			if err != nil {
+				return nil, fmt.Errorf("invalid hex in TCP altProto data: '%s'", httpsString)
+			}
+			tcp.Payload = []byte(httpsData)
+		} else if tcp.DstPort == layers.TCPPort(443) {
+			httpString := "474554202f20485454502f312e310d0a486f73743a20636f652e706c616d65786d0d0a557365722d4167656e743a206375726c2f382e31312e310d0a4163636570743a202a2f2a0d0a0d0a"
+			httpData, err := hex.DecodeString(httpString)
+			if err != nil {
+				return nil, fmt.Errorf("invalid hex in TCP altProto data: '%s'", httpString)
+			}
+			tcp.Payload = []byte(httpData)
+		} else {
+			return nil, fmt.Errorf("unknown altProto port: %v", tcp.DstPort)
+		}
+	}
 	// Add options if they exist
 	if len(t.config.Options) > 0 {
 		tcp.Options = t.config.Options
