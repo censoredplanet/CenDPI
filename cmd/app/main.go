@@ -10,6 +10,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +32,7 @@ type GlobalMeasurementConfig struct {
 	GatewayMAC      net.HardwareAddr `yaml:"-"`
 	SourceIP        net.IP           `yaml:"-"`
 	StartSourcePort uint16           `yaml:"startSourcePort"`
-	Probelist       []string         `yaml:"probelist"`
+	ProbeDir        string           `yaml:"probedir"`
 }
 
 func (c *GlobalMeasurementConfig) UnmarshalYAML(node *yaml.Node) error {
@@ -168,6 +170,19 @@ func drainChannels(chMap map[netcap.FlowKey]chan netcap.PacketInfo) {
 	}
 }
 
+func extractLeadingNumber(filename string) int {
+	base := filepath.Base(filename)
+	parts := strings.SplitN(base, "_", 2)
+	if len(parts) == 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 func main() {
 	if os.Geteuid() != 0 {
 		log.Fatal("This program must be run as root! (sudo)")
@@ -189,6 +204,20 @@ func main() {
 		log.Fatalf("Error parsing measurement config: %v\n", err)
 	}
 
+	// Read all probe files from the specified directory
+	if globalCfg.ProbeDir == "" {
+		log.Fatal("Probe directory not specified in the measurement config")
+	}
+	probeFiles, err := filepath.Glob(filepath.Join(globalCfg.ProbeDir, "*.yml"))
+	if err != nil {
+		log.Fatalf("Error reading probe directory: %v", err)
+	}
+
+	// Sort by the leading integer in the filename.
+	sort.Slice(probeFiles, func(i, j int) bool {
+		return extractLeadingNumber(probeFiles[i]) < extractLeadingNumber(probeFiles[j])
+	})
+
 	targets, err := parseTargetsJSONL(*targetConfigPath)
 	if err != nil {
 		log.Fatalf("Error parsing targets file: %v\n", err)
@@ -196,7 +225,7 @@ func main() {
 
 	// build probe template
 	var probeTemplates []service.ServiceConfig
-	for _, probeFile := range globalCfg.Probelist {
+	for _, probeFile := range probeFiles {
 		probeCfg, err := parseProbeConfigYAML(probeFile, globalCfg)
 		if err != nil {
 			log.Printf("Skipping probe %s: %v\n", probeFile, err)

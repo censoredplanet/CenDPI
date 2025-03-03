@@ -57,10 +57,11 @@ type ServiceMessage struct {
 }
 
 type ServicePacket struct {
-	Ethernet ethernet.EthernetConfig
-	IP       ip.IPConfig    `yaml:"ip"`
-	TCP      *tcp.TCPConfig `yaml:"tcp"`
-	Delay    float64        `yaml:"delay"` // Per-packet delay in seconds
+	Ethernet     ethernet.EthernetConfig
+	IP           ip.IPConfig    `yaml:"ip"`
+	TCP          *tcp.TCPConfig `yaml:"tcp"`
+	Delay        float64        `yaml:"delay"` // Per-packet delay in seconds
+	ServerPacket bool           `yaml:"serverPacket"`
 }
 
 type Target struct {
@@ -361,6 +362,11 @@ func StartSingleMeasurement(netCap *netcap.NetCap, probe ServiceConfig, target T
 	flowKey := netcap.NormalizeFlowKey(probe.SrcIP, probe.SrcPort, probe.DstIP, probe.DstPort)
 	probe.Flowkey = flowKey
 	for n, p := range probe.Packets {
+
+		if p.ServerPacket {
+			continue
+		}
+
 		if n == 0 {
 			initSeq := rand.Uint32()
 			/*_, ok := loadTCPState(flowKey)
