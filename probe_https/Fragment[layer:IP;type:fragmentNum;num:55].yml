@@ -1,0 +1,638 @@
+# yaml-language-server: $schema=./cendpi-schema.json
+protocol: both
+message:
+  http:
+    request: "GET / HTTP/1.1\r\nHost: ${}\r\nUser-Agent: curl/8.11.1\r\nAccept: */*\r\n\r\n"
+    padding: true
+  tls:
+    clientHelloConfig:
+      chVersion: "0303"
+      pqKeyShare: true
+    records:
+      - contentType: "16"
+        recordVersion: "0301"
+        payloadType: "clienthello"
+        offset: 0
+        length: -1
+
+packets:
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33345
+    tcp:
+      window: 65535
+      flags:
+        syn: true
+      tcpOptions:
+        - tcpOptionType: 1
+        - tcpOptionType: 1
+        - tcpOptionType: 2
+          tcpOptionLength: 4
+          tcpOptionData: "05B4"
+        - tcpOptionType: 3
+          tcpOptionLength: 3
+          tcpOptionData: "06"
+    delay: 1
+      
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33346
+    tcp:
+      window: 2056
+      flags:
+        ack: true
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 3
+      messageOffset: 24
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 6
+      messageOffset: 48
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 9
+      messageOffset: 72
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 12
+      messageOffset: 96
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 15
+      messageOffset: 120
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 18
+      messageOffset: 144
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 21
+      messageOffset: 168
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 24
+      messageOffset: 192
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 27
+      messageOffset: 216
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 30
+      messageOffset: 240
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 33
+      messageOffset: 264
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 36
+      messageOffset: 288
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 39
+      messageOffset: 312
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 42
+      messageOffset: 336
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 45
+      messageOffset: 360
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 48
+      messageOffset: 384
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 51
+      messageOffset: 408
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 54
+      messageOffset: 432
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 57
+      messageOffset: 456
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 60
+      messageOffset: 480
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 63
+      messageOffset: 504
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 66
+      messageOffset: 528
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 69
+      messageOffset: 552
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 72
+      messageOffset: 576
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 75
+      messageOffset: 600
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 78
+      messageOffset: 624
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 81
+      messageOffset: 648
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 84
+      messageOffset: 672
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 87
+      messageOffset: 696
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 90
+      messageOffset: 720
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 93
+      messageOffset: 744
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 96
+      messageOffset: 768
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 99
+      messageOffset: 792
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 102
+      messageOffset: 816
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 105
+      messageOffset: 840
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 108
+      messageOffset: 864
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 111
+      messageOffset: 888
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 114
+      messageOffset: 912
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 117
+      messageOffset: 936
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 120
+      messageOffset: 960
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 123
+      messageOffset: 984
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 126
+      messageOffset: 1008
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 129
+      messageOffset: 1032
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 132
+      messageOffset: 1056
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 135
+      messageOffset: 1080
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 138
+      messageOffset: 1104
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 141
+      messageOffset: 1128
+      messageLength: 24
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 144
+      messageOffset: 1152
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 147
+      messageOffset: 1176
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 150
+      messageOffset: 1200
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 153
+      messageOffset: 1224
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 156
+      messageOffset: 1248
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: true
+      fragmentOffset: 159
+      messageOffset: 1272
+      messageLength: 24
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33347
+      moreFragments: false
+      fragmentOffset: 162
+      messageOffset: 1296
+      messageLength: -1
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 50000
+      moreFragments: false
+      fragmentOffset: 0
+      messageOffset: 0
+      messageLength: -1
+      reverseDomain: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33348
+    tcp:
+      window: 2056
+      flags:
+        ack: true
+        fin: true
+    delay: 1
+
+  - ethernet:
+    ip:
+      tos: 0
+      ttl: 64
+      id: 33349
+    tcp:
+      window: 2056
+      flags:
+        ack: true

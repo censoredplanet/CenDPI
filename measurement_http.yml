@@ -1,0 +1,7 @@
+interface: en0
+resultsPath: results
+sourceMAC: 00:1A:2B:3C:4D:5E
+gatewayMAC: 00:1A:2B:3C:4D:5E
+sourceIP: 192.168.0.1
+startSourcePort: 42060
+probedir: probe_http
